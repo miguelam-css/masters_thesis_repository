@@ -1,0 +1,178 @@
+---
+title: "Building the panels for the models"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+In this document we build the panels the models need. We take the daily trips dataset, and attach to each row the UTCI of the district where the trip ends and the INE income of the district where the traveller lives. We then aggregate the trips arriving at each district on each day, grouping by all the vairables we will need for the models in order to keep them. The result is a table with one row per district, day and combination of those variables. We build first the panel for research question 3, which keeps age and sex and then obtain the smaller panel for research questions 1 and 2 from the bigger one. The first one is saved as a DuckDB database because it does not fit session memory, the second one is saved in an .rds file.
+
+```{r}
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(stringr)
+library(lubridate)
+library(DBI)
+library(duckdb)
+```
+
+## Connect to the dailyt trips DuckDB
+
+```{r}
+# We connect to the MITMS daily trips duckdb:
+mitma_daily_con <- dbConnect(
+  duckdb(),
+  dbdir = "../data/mitma_daily/mitma_daily.duckdb",
+  read_only = TRUE # We won't edit the database in this script
+  )
+
+# Limit CPU threads and RAM. We open a second connection below, so we set
+# lower limits than we did in previous scripts:
+dbExecute(mitma_daily_con, "SET memory_limit = '4GB'")
+dbExecute(mitma_daily_con, "SET threads = 6")
+
+# Load the lazy table:
+mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
+```
+
+## Load UTCI and income tables
+
+We need two things attached to every trip before we can aggregate: the UTCI of the district where the trip ends, and the income of the district where the traveller lives. We settled on 14:00 UTC (16:00 local time) so we keep only that hour:
+
+```{r}
+utci_per_mitma <- readRDS("../data/mitma_zones_utci_added/utci_per_mitma.rds")
+
+utci_1400 <- utci_per_mitma |>
+  select(mitma_zone_id, date, "utci" = h14)
+```
+
+And we load the income from INE. We need to join by district and year, so we keep those variables:
+
+```{r}
+income_data <- readRDS("../data/mitma_zones_income_added/income_data.rds")
+
+income_data <- income_data |>
+  select(mitma_zone_id, year, ine_income_bracket, ine_income_tercile)
+```
+
+We need to join these two tibbles with the daily trips DuckDB database, but `left_join()` requires both tables to be of the same kind (either tibbles or lazy tables), since we cannot load the daily trips database into RAM memory due to its size, we register the tibbles as virtual tables in the DuckDB connection.
+
+```{r}
+# Register both tibbles as virtual tables:
+duckdb_register(mitma_daily_con, "utci_1400", utci_1400)
+duckdb_register(mitma_daily_con, "income_data", income_data)
+
+# Make them lazy tables to be able to join:
+utci_db <- tbl(mitma_daily_con, "utci_1400")
+income_db <- tbl(mitma_daily_con, "income_data")
+```
+
+## The panel for research question 3
+
+We will build the panel we need to answer research question 3, since it is the bigger one, and the panel necessary for research questions 1 and 2 can be obtained from the bigger one. This panel needs to keep:
+
+- `date` and `id_destination`: the fixed effects.
+- `province`: to cluster in the twfe models.
+- `home_trip`: to easily filter home trips.
+- `n_trips`: the outcome variable.
+- `activity_destination`, `age`, `sex`, and `income`: the interactions for RQ3.
+- `ine_income_bracket` and `ine_income_tercile`: the income from INE.
+- `utci`: the temperature.
+
+Since the result doesn't fit our RAM memory, we write it in a new DuckDB.
+
+```{r}
+# We open a second connection, for writing the result. It gets its own RAM and
+# CPU limits, lower than they'd be if we only had one connection open:
+model_panel_con <- dbConnect(
+  duckdb(),
+  dbdir = "../data/model_panel/model_panel.duckdb"
+  )
+
+dbExecute(model_panel_con, "SET memory_limit = '4GB'")
+dbExecute(model_panel_con, "SET threads = 6")
+```
+
+Since `dbWriteTable()` needs a real data frame and the whole panel does not fit in our RAM memory, we write it day by day, as we did when building `mitma_daily`.
+
+```{r}
+# The dates of the study period. They have to be characters: the for loop 
+# converts the "date" class into numbers, we need the full string to be 
+# able to join by date with the mitma_daily DuckDB database:
+study_dates <- c(
+  seq(as_date("2022-05-01"), as_date("2022-09-30")),
+  seq(as_date("2023-05-01"), as_date("2023-09-30"))
+  ) |>
+  as.character()
+```
+
+```{r}
+# Run the for loop for every day in our study period:
+for (one_date in study_dates) {
+
+  # Save a tibble with one day of the panel
+  one_day_panel <- mitma_daily |>
+    filter(date == one_date) |>
+    # Join the INE income with mitma_daily:
+    left_join(income_db, by = join_by(home_id == mitma_zone_id, year)) |>
+    # Join the UTCI data with mitma_daily:
+    left_join(utci_db, by = join_by(id_destination == mitma_zone_id, date)) |>
+    # Group by id_destination because we will use the number of trips to
+    # destination district as our outcome variable:
+    group_by(
+      date, id_destination,
+      activity_destination, income, age, sex, home_trip,
+      utci, ine_income_bracket, ine_income_tercile
+      ) |>
+    # And sum the trips:
+    summarise("n_trips" = sum(n_trips), .groups = "drop") |>
+    collect() |>
+    # DuckDB returns the ids as factors, and we want them as text in the
+    # panel so that later joins do not have to convert them:
+    mutate(
+      "id_destination" = as.character(id_destination),
+      # The province, to cluster the standard errors. It is
+      # the first two digits of the district id:
+      "province" = str_sub(id_destination, end = 2))
+
+
+  # And we add this day to the duckdb table:
+  dbWriteTable(model_panel_con, "trips_panel_demographic", one_day_panel,
+               append = TRUE)
+}
+```
+
+## The panel for research question 1 and 2
+
+To answer research questions 1 and 2 we do not use age or sex, so we build the smaller panel:
+
+```{r}
+trips_panel_demographic <- tbl(model_panel_con, "trips_panel_demographic")
+
+trips_panel <- trips_panel_demographic |>
+  # Group by everything but age and sex:
+  group_by(
+    date, id_destination, province, utci,
+    activity_destination, income, ine_income_bracket, ine_income_tercile,
+    home_trip) |>
+  # And sum the trips:
+  summarise("n_trips" = sum(n_trips), .groups = "drop") |>
+  collect()
+
+glimpse(trips_panel)
+```
+
+This one is small enough to be saved as an .rds and comfortably loaded into the session memory:
+
+```{r}
+saveRDS(trips_panel, "../data/model_panel/trips_panel.rds")
+```
+
+We are done with both databases, so we close the DuckDB connections.
+
+```{r}
+dbDisconnect(mitma_daily_con, shutdown = TRUE)
+dbDisconnect(model_panel_con, shutdown = TRUE)
+```

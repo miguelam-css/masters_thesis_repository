@@ -1,0 +1,108 @@
+---
+title: "Bounding box for the CDS UTCI request"
+author: Miguel Agenjo Montejo
+format: html
+editor: visual
+---
+
+The purpose of this document is to find the exact coordinates of the bounding box required to [download UTCI data from the ECMWF](https://cds.climate.copernicus.eu/datasets/derived-utci-historical?tab=download).
+
+## Libraries and data
+
+```{r}
+#| message: false
+#| warning: false
+
+library(spanishoddata)
+library(dplyr)
+library(stringr)
+library(sf)
+library(ggplot2)
+
+spod_set_data_dir("../data/mitma")
+```
+
+We use `spod_get_zones()` to download the geometry data for the MITMS zones at the most granular level possible.
+
+```{r}
+od_districts <- spod_get_zones("districts", ver = 2)
+```
+
+This function returns zones from Portugal and France (and an "external" zone) which we will not use in our analysis. Their ids start with `PT`, `FR` , and the external zone is `external`\`, this means none of them starts with a digit, unlike the Spanish zones do, we filter them out accordingly.
+
+```{r}
+districts <- od_districts |>
+    # Drop the Portuguese, French, and "external" zones: their ids are "external"
+    # or start with "PT" or "FR" instead of a digit:
+    filter(str_starts(id, "\\d"))
+```
+
+The download at ECMWF requires to define the area in geographic coordinates (“Layers are defined on a regular grid in the World Geodetic System 1984 (WGS 84)” (Di Napoli et al., 2021, p. 6), that is, it requires the limits of the area to be downloaded expressed as degrees fo latitude and longtitud (for North, South, West and East, limits). However, as the `spanishoddata` codeook states, the `geom` variable does not use a geographic coordinate reference system, but a projected reference system: the geom variable is the "spatial geometry of each district stored as a MULTIPOLYGON object, projected in the ETRS89 / UTM zone 30N CRS with XY dimensions" \[la he sacado de spod_codebook(ver = 2), citar bien \], which expresses northing and easting distances in meters. In order to get latitude and longitude in degrees, we need to reproject the geometry into a different CRS, like the aforementioned EPSG:4326 (WGS 84), which we can do with `st_transform()` from the `sf` package (following [Lovelace et al., 2019, Section 7.7](https://r.geocompx.org/reproj-geo-data.html)).
+
+```{r}
+districts <- districts |>
+  st_transform("EPSG:4326")
+```
+
+We plot the resulting geometries to confirm everything is right:
+
+```{r}
+ggplot(districts) +
+  geom_sf() +
+  theme_minimal()
+```
+
+In order to make the data request lighter, we will do two separate requests: one for the peninsula and the Balearic islands, and a separate one for the Canary Islands. So we separate them:
+
+```{r}
+# Canary islands:
+districts_canary <- districts |> 
+  filter(str_starts(id, "35|38"))
+
+# Plot to check everything is correct:
+ggplot(districts_canary) +
+  geom_sf() +
+  theme_minimal()
+```
+
+```{r}
+# Peninsula and Balearic Islands:
+districts_peninsula <- districts |> 
+  filter_out(str_starts(id, "35|38"))
+  
+# Plot to check everything is correct:
+ggplot(districts_peninsula) +
+  geom_sf() +
+  theme_minimal()
+```
+
+And get the bounding box for both:
+
+Canary Islands bounding box:
+
+```{r}
+st_bbox(districts_canary)
+```
+
+Peninsula bounding box:
+
+```{r}
+st_bbox(districts_peninsula)
+```
+
+To make sure we have some margin of error, we will request the data with at least an extra 0.25 degrees of longitude/latitude (the resolution ECMWF offers is 0.25 degrees \[“Each file contains as many stacks as the number of days selected. Each stack contains 24 time steps at 0.25 resolution of the requested human biometeorology index.” (Di Napoli et al., 2021, p. 8\]).
+
+- For the Canary Islands:
+  - North: 29.75º
+  - South: 27.25º
+  - West: -18.5º
+  - East: -13º
+- For the peninsula and Balearic Islands:
+  - North: 44.25º
+  - South: 35º
+  - West: -9.75º
+  - East: 4.75º
+
+## NOTA:
+
+Podría investigar cómo utilizar el código que aparece en la pantalla final en ECMWEF e igual crear un archivo para reproducirlo por completo, pero de momento dejo la descarga manual porque no es codigo de R y ya la he iniciado (aquí: https://cds.climate.copernicus.eu/datasets/derived-utci-historical?tab=download)

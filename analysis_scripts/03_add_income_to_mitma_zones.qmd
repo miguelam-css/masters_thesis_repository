@@ -1,0 +1,338 @@
+---
+title: "Adding income to MITMS zones"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+In this document we build the INE income table: we assign to each MITMS district the mean net income per person of its census sections, taken from INE's ADRH and weighted by their population, for each year of our study period. We also create two new variables: a variable with the bracket the district would fall in if we used MITMS's income brackets (with cuts at 10 thousand and 15 thousand euros), and terciles wieghted by population. We save the result in an .rds file.
+
+```{r}
+#| message: false
+#| warning: false
+
+library(spanishoddata)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(readr)
+library(sf)
+```
+
+## Download MITMS districts
+
+```{r}
+# Set the data directory:
+spod_set_data_dir("../data/mitma/")
+
+# Download the MITMS districts geometries:
+mitma_districts <- spod_get_zones(zones = "districts", ver = 2)
+```
+
+## Clean MITMS districts
+
+```{r}
+# Drop the Portuguese, French, and "external" zones: their ids are "external"
+# or start with "PT" or "FR" instead of a digit:
+mitma_districts <- mitma_districts |>
+  filter(str_starts(id, "\\d"))
+
+# Each zone lists all its census sections in a single cell, separated by
+# "; ", we transform them into one row per section:
+mitma_districts <- mitma_districts |>
+  # Remove the geometry:
+  st_drop_geometry() |>
+  # Keep only the relevant columns:
+  select(id, name, census_sections, population) |>
+  # Separate census_sections into one row per section:
+  separate_longer_delim(census_sections, ";") |>
+  # Remove the remaining spaces:
+  mutate("census_sections" = str_trim(census_sections))
+```
+
+We check how the census section ids look to confirm the way to join with INE data later. According to the documentation \[CITAR BIEN\], they are ine section codes, but wether there are any MITMS zones without a section code or a different format in the section code (sometimes this dataset adds letters before or after for specific cases).
+
+```{r}
+glimpse(mitma_districts)
+```
+
+As expected, they are a 10 digit code, same as INE. We check if there are any exceptions:
+
+```{r}
+# Values that are not a ten digit section code:
+mitma_districts |>
+  filter(!str_detect(census_sections, "^\\d{10}$"))
+```
+
+There are 49 zones that have no census section code, they don't have population either, we drop these as we cannot join them through INE census section codes:
+
+```{r}
+mitma_districts <- mitma_districts |>
+  filter(str_detect(census_sections, "^\\d{10}$"))
+```
+
+Finally, we rename some columns to avoid clashes later on:
+
+```{r}
+mitma_districts <- mitma_districts |>
+  rename(
+    "mitma_population" = population,
+    "mitma_zone_name" = name,
+    "mitma_section_code" = census_sections,
+    "mitma_zone_id" = id
+  )
+```
+
+## Load INE data
+
+```{r}
+# Load income data:
+income_adrh_raw <- readRDS("../data/ine/income_adrh_raw.rds")
+income_adrh_raw <- as_tibble(income_adrh_raw)
+
+# Load demographic data (includes population):
+dem_adrh_raw <- readRDS("../data/ine/dem_adrh_raw.rds")
+dem_adrh_raw <- as_tibble(dem_adrh_raw)
+```
+
+## Clean INE data
+
+Income dataset:
+
+```{r}
+# We rename the columns, fix column types, convert Spanish decimal separator
+# "," into English decimal separator ".", and convert blank spaces into NAs:
+income_adrh <- income_adrh_raw |>
+  mutate(
+    "municipality" = na_if(Municipios, ""),
+    "district" = na_if(Distritos, ""),
+    "section" = na_if(Secciones, ""),
+    "income_indicator" = Indicadores.de.renta.media,
+    "year" = Periodo,
+    "total" = parse_number(
+      Total,
+      na = c("", "."),
+      locale = locale(grouping_mark = ".", decimal_mark = ",")
+    )
+  ) |>
+  # Select to keep only the clean columns, not the raw ones:
+  select(municipality, district, section, income_indicator, year, total)
+
+# Pivot the income indicators wider to get an indicator per column:
+income_adrh <- income_adrh |> pivot_wider(
+  names_from = income_indicator,
+  values_from = total)
+
+# Rename the income indicators:
+income_adrh <- income_adrh |> rename(
+  "mean_net_income_person" = `Renta neta media por persona`,
+  "mean_net_income_household" = `Renta neta media por hogar`,
+  "mean_income_per_consumption_unit" = `Media de la renta por unidad de consumo`,
+  "median_income_per_consumption_unit" = `Mediana de la renta por unidad de consumo`,
+  "mean_gross_income_person" = `Renta bruta media por persona`,
+  "mean_gross_income_household" = `Renta bruta media por hogar`
+)
+```
+
+Demographic dataset:
+
+```{r}
+# We rename the columns, fix column types, convert Spanish decimal separator
+# "," into English decimal separator ".", and convert blank spaces into NAs:
+dem_adrh <- dem_adrh_raw |>
+  mutate(
+    "municipality" = na_if(Municipios, ""),
+    "district" = na_if(Distritos, ""),
+    "section" = na_if(Secciones, ""),
+    "demographic_indicator" = Indicadores.demográficos,
+    "year" = Periodo,
+    "total" = parse_number(
+      Total,
+      na = c("", "."),
+      locale = locale(grouping_mark = ".", decimal_mark = ",")
+    )
+  ) |>
+  # Select to keep only the clean columns, not the raw ones:
+  select(municipality, district, section, demographic_indicator, year, total)
+
+# Pivot the demographic indicators wider to get an indicator per column:
+dem_adrh <- dem_adrh |> pivot_wider(
+  names_from = demographic_indicator,
+  values_from = total
+)
+
+# Rename the demographic indicators:
+dem_adrh <- dem_adrh |> rename(
+  "mean_age" = `Edad media de la población`,
+  "pct_under_18" = `Porcentaje de población menor de 18 años`,
+  "pct_65_and_over" = `Porcentaje de población de 65 y más años`,
+  "mean_household_size" = `Tamaño medio del hogar`,
+  "pct_single_person_households" = `Porcentaje de hogares unipersonales`,
+  "population" = `Población`,
+  "pct_spanish_population" = `Porcentaje de población española`
+)
+```
+
+## Join INE data and keep only the relevant colums
+
+```{r}
+# From the demographic tibble we keep just the join key columns and the
+# population variable we need:
+dem_to_join <- dem_adrh |>
+  select(municipality, district, section, year, population)
+
+# From the income tibble we keep the join keys, the income variable MITMS
+# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
+# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
+# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
+# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
+# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
+# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
+# uses (net income per person):
+income_to_join <- income_adrh |>
+  select(municipality, district, section, year,mean_net_income_person)
+
+# Join the tibbles:
+adrh <- dem_to_join |>
+  left_join(
+    income_to_join,
+    by = join_by(municipality, district, section, year),
+    keep = FALSE
+  )
+
+# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
+# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
+# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
+# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
+# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
+# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
+# 2022 and 2023 (the years in our study period):
+adrh <- adrh |>
+  filter(year %in% c(2020, 2022, 2023))
+
+# The ADRH includes aggregated rows for municipalities and INE districts,
+# we keep only the census tract rows:
+adrh <- adrh |>
+  filter(!is.na(section))
+
+# The section code is composed by the municipality code (first 5 digits),
+# the district code (next 2 digits), and the section specific code (last 
+# 3 digits), we thus remove the municipality and district code. Also, since 
+# the section variable includes both the section code and the section name,
+# we split it in two columns:
+adrh <- adrh |>
+  mutate(
+    "section_code" = str_extract(section, "^\\d{10}"),
+    "section_name" = str_remove(section, "^\\d{10} ")
+  ) |>
+  select(-c(municipality, district, section))
+```
+
+## Join MITMS with INE
+
+Every INE section should be part of at least one MITMS zone (and only one), so we attach the MITMS zone to each INE section. We use a left join so that the sections present in INE but not in MITMS stay in the table, allowing us to count them before dropping them:
+
+```{r}
+adrh_mitma <- adrh |>
+  left_join(
+    mitma_districts,
+    by = join_by(section_code == mitma_section_code)
+  )
+```
+
+We check how many sections have no MITMS zone:
+
+```{r}
+adrh_mitma |>
+  # Find INE sections without MITMS zone:
+  filter(is.na(mitma_zone_id)) |>
+  summarise(
+    rows = n(),
+    sections = n_distinct(section_code)
+  )
+```
+
+There are 739 sections (three times that amount of rows because we have data for three years), that are not assigned to a zone. We discuss what they are in (((MENCIONAR EL DOCUMENTO CORRECTO, ¿ANEXO B? lo que termine siendo el issue_found))) none of them can be asigned to a zone, using INE section code, so we drop them:
+
+```{r}
+adrh_mitma <- adrh_mitma |>
+  filter(!is.na(mitma_zone_id))
+```
+
+## Income weighted mean for each MITMS district
+
+As we've seen, a MITMS zone often includes multiple INE census sections. A simple average over the section would mean we give the same weight to every section no matter its population, no matter if it had 500 or 5000 inhabitants. We thus weight each section by its population when computing the mean income for each MITMS zone.
+
+First, we filter out sections without income or population (since we cannot compute the weighted mean if one of those two is missing):
+
+```{r}
+# We see hoy many are there:
+adrh_mitma |>
+  filter(is.na(mean_net_income_person) | is.na(population)) |>
+  count(year)
+
+# And filter them out:
+adrh_mitma <- adrh_mitma |>
+  filter_out(is.na(mean_net_income_person) | is.na(population))
+```
+
+We now compute the weighted mean:
+
+```{r}
+income_data <- adrh_mitma |>
+  # We want one income per zone and year:
+  group_by(mitma_zone_id, year) |>
+  summarise(
+    # Compute the weighted mean:
+    "ine_income" = sum(mean_net_income_person * population) / sum(population),
+    # And INE population:
+    "ine_population" = sum(population),
+    .groups = "drop"
+  )
+```
+
+And compute the bracket version for each year using the same bracket as MITMS:
+
+```{r}
+income_data <- income_data |>
+  mutate(
+    "ine_income_bracket" = case_when(
+      ine_income < 10000 ~ "<10",
+      ine_income <= 15000 ~ "10-15",
+      ine_income > 15000 ~ ">15"
+      ) |>
+      # Set the levels so that they are not ordered alphabetically:
+      factor(levels = c("<10", "10-15", ">15"))
+    )
+```
+
+Finally, we compute the income terciles. They are population-weighted and computed within each year:
+
+```{r}
+income_data <- income_data |>
+  # We group by year to get the terciles with the data of each year:
+  group_by(year) |>
+  # We sort the rows by income:
+  arrange(ine_income) |>
+  mutate(
+    # Sum the cumulative population and divide by the total population that
+    # year to get the population share covered up to each row:
+    "population_share" = cumsum(ine_population) / sum(ine_population),
+    # With the population share we assign each row to a tercile:
+    "ine_income_tercile" = case_when(
+      population_share <= 1/3 ~ "low",
+      population_share <= 2/3 ~ "middle",
+      population_share > 2/3 ~ "high"
+      ) |>
+      # Set the levels so that they are not ordered alphabetically:
+      factor(levels = c("low", "middle", "high"))
+    ) |>
+  ungroup() |>
+  select(!population_share) # Remove the auxiliary variable
+```
+
+## Save the dataset
+
+```{r}
+saveRDS(income_data, "../data/mitma_zones_income_added/income_data.rds")
+```

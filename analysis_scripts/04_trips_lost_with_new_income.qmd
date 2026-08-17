@@ -1,0 +1,291 @@
+---
+title: "Trips lost with the new income variable"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+Since we can only assing the INE income variable to trips that have either origin or destination at "home", we lose every other trip. In this document we measure how many trips that is, and whether the loss spreads evenly across demographic variables, activities and zones.
+
+```{r}
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(sf)
+library(spanishoddata)
+library(DBI)
+library(duckdb)
+
+# We defined a custom theme for all the figures in the masters thesis:
+source("../dataviz_theme/theme_tfm.R")
+```
+
+## Connecting to the daily trips
+
+We connect to the MITMS daily trips dataset:
+
+```{r}
+# We connect to the MITMS daily trips duckdb:
+mitma_daily_con <- dbConnect(
+  duckdb(),
+  dbdir = "../data/mitma_daily/mitma_daily.duckdb",
+  read_only = TRUE # We won't edit the database in this script
+  )
+
+# Limit CPU threads and RAM:
+dbExecute(mitma_daily_con, "SET memory_limit = '6GB'")
+dbExecute(mitma_daily_con, "SET threads = 6")
+
+# Load the lazy table:
+mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
+```
+
+## How many trips have home as origin or destination
+
+```{r}
+mitma_daily |>
+  summarise(
+    "total_trips" = sum(n_trips),
+    # home_trip is true when either origin or destination is home
+    "total_home_trips" = sum(if_else(home_trip == TRUE, n_trips, 0))) |>
+  collect() |>
+  # And compute the proportion:
+  mutate("home_trips_share" = total_home_trips / total_trips)
+```
+
+Almost 75% of the trips have home as their origin or as their destination. While losing 25% of the trips is not ideal (specially since we are not losing them at random), having the possibility of assigning the correct income from INE to three foruths of the trips is good news.
+
+## Bias of the trips kept
+
+### Bias on the demographic and trip variables
+
+We first look at the bias in the demographic variables (`income`, `age`, and `sex`), and in the trip variables (`distance`, `activity_origin`, `activity_destination`).
+
+```{r}
+# We get the aggregates grouping by the variables we are interested in,
+# the result is small enough to be collected into the session memory:
+trips_grouped <- mitma_daily |>
+  group_by(income, age, sex, distance, activity_origin, activity_destination) |>
+  summarise(
+    "total_trips" = sum(n_trips),
+    "total_home_trips" = sum(if_else(home_trip == TRUE, n_trips, 0))) |>
+  collect() |>
+  ungroup()
+```
+
+```{r}
+# Define the function we will apply to every variable of interest:
+home_trips_share_by_variable <- function(variable) {
+  trips_grouped |>
+    # Group by the variable of interest, embracing it so that the
+    # function looks inside variable for the column name
+    # ESTO LO HE COGIDO DE R FOR DATA SCINCE SECTION 25.3
+    group_by({{variable}}) |>
+    # Aggregate:
+    summarise(
+      "total_trips" = sum(total_trips),
+      "total_home_trips" = sum(total_home_trips)) |>
+    # Compute proportion:
+    mutate("home_trips_share" = 100 * (total_home_trips/total_trips))
+}
+
+# And run the function for every variable of interest, and bind the rows:
+home_trips_shares <- bind_rows(
+  home_trips_share_by_variable(income),
+  home_trips_share_by_variable(age),
+  home_trips_share_by_variable(sex),
+  home_trips_share_by_variable(distance),
+  home_trips_share_by_variable(activity_origin),
+  home_trips_share_by_variable(activity_destination)
+  ) |>
+  pivot_longer(
+    cols = -c(total_trips, total_home_trips, home_trips_share),
+    names_to = "variable",
+    values_to = "categories",
+    values_drop_na = TRUE
+    ) |>
+  relocate(c(variable, categories), .before = 1)
+
+home_trips_shares
+```
+
+```{r}
+# The overall share, to plot it as a dashed line for reference:
+overall_share <- 100 * (sum(trips_grouped$total_home_trips) / sum(trips_grouped$total_trips))
+
+# Define the variable order for the facets: demographic variables on the top
+# row, trip variables on the bottom row:
+variable_order <- c("age", "sex", "income",
+                    "distance", "activity_origin", "activity_destination")
+home_trips_shares <- home_trips_shares |>
+  mutate("variable" = factor(variable, levels = variable_order)) 
+
+
+# Plot:
+ggplot(home_trips_shares, 
+       aes(x = home_trips_share, y = categories)) +
+  
+  # The lollipops:
+  # Lollipo stick:
+  geom_segment(aes(x = 0, xend = home_trips_share, yend = categories),
+               colour = "grey50", linewidth = 0.3) +
+  
+  # Lollipop head:
+  geom_point(colour = "black", size = 0.8) +
+  facet_wrap(
+    ~ variable,
+    nrow = 2,
+    scales = "free_y",
+    # Cleaner column names:
+    labeller = labeller(variable = c(
+      "activity_destination" = "Destination activity",
+      "activity_origin" = "Origin activity",
+      "age" = "Age",
+      "distance" = "Distance (km)",
+      "income" = "Income (thousand €)",
+      "sex" = "Sex"))) +
+  
+  # Cleaner names for the activity categories:
+  scale_y_discrete(labels = c(
+    "home" = "Home",
+    "work_or_study" = "Work/study",
+    "frequent_activity" = "Frequent",
+    "infrequent_activity" = "Infrequent")) +
+  scale_x_continuous(breaks = c(0, 25, 50, 75, 100)) +
+
+  # Dashed vertical line with the overall share for reference:
+  geom_vline(xintercept = overall_share,
+             linetype = "dashed",
+             colour = "grey50") +
+  # A label for this vertical line:
+  geom_text(
+    # We only want it on the first facet, age:
+    data = data.frame("variable" = factor("age", levels = variable_order)),
+    aes(x = overall_share,
+        y = Inf,
+        label = paste0(round(overall_share, 1), "%")),
+    inherit.aes = FALSE,
+    hjust = 0.5,
+    vjust = -0.4,
+    size = 3,
+    colour = "grey50") +
+  # To allow the label of the reference line sit outside the panel:
+  coord_cartesian(clip = "off") +
+  
+  labs(
+    x = "Share of trips with home as origin or destination across variables (%)",
+    y = NULL) +
+  
+
+  theme_tfm +
+  # Remove the horizontal grid lines:
+  theme(panel.grid.major.y = element_blank())
+```
+
+### Geographic bias
+
+Finally, we plot a map to check whether there is geographical bias in the missing values. We will plot two versions: the first one with the total amount of trips with origin in each district, the second one with total amount of trips with destination in each district. This way, we are not blind to biases affecting certain directions of travel.
+
+We first load the MITMS district geometries:
+
+```{r}
+# We load the file we created with moved Canary Islands:
+mitma_districts <- readRDS("../data/mitma_geometries_moved_can.rds")
+```
+
+We aggregate the trips from the duckDB grouping by `id_origin` and `id_destination`:
+
+```{r}
+# This grouping by itself allows us to collect into the session memory:
+trips_od <- mitma_daily |>
+  group_by(id_origin, id_destination) |>
+  summarise(
+    "total_trips" = sum(n_trips),
+    "total_home_trips" = sum(if_else(home_trip == TRUE, n_trips, 0))) |>
+  collect() |>
+  ungroup()
+```
+
+And compute the number of total trips and the share of trips kept per district:
+
+```{r}
+# By origin:
+total_trips_origin <- trips_od |>
+  group_by(id_origin) |>
+  summarise(
+    "total_trips" = sum(total_trips),
+    "total_home_trips" = sum(total_home_trips)) |>
+  mutate(
+    "home_trips_share" = 100 * (total_home_trips / total_trips),
+    # DuckDB returns the ids as factors, we convert them to character
+    # to match the type of the id column mitma_districts
+    "id" = as.character(id_origin))
+
+# By destination
+total_trips_destination <- trips_od |>
+  group_by(id_destination) |>
+  summarise(
+    "total_trips" = sum(total_trips),
+    "total_home_trips" = sum(total_home_trips)) |>
+  mutate(
+    "home_trips_share" = 100 * (total_home_trips / total_trips),
+    # DuckDB returns the ids as factors, we convert them to character
+    # to match the type of the id column mitma_districts
+    "id" = as.character(id_destination))
+```
+
+Check the minimum amount of trips in a district to make sure we don't plot districts with zero trips or handful of them:
+
+```{r}
+# The smallest district in each direction, over the whole period. Districts
+# with no trips at all have no row here, so they cannot appear as a zero:
+min(total_trips_origin$total_trips)
+min(total_trips_destination$total_trips)
+```
+
+The smallest values are still in the thousands. We now join the geometries and plot one map per direction:
+
+```{r}
+# We start by defining the scale:
+# Fixed to the whole range of a percentage, so that both maps can be
+# compared to each other:
+trips_kept_scale <- scale_fill_distiller(
+  palette = "YlGnBu", direction = 1,
+  limits = c(0, 100),
+  # Plain red, outside our palettes so that it reads as an exception:
+  na.value = alpha("red", 0.5))
+
+# Join geometry and plot origin trips kept:
+mitma_districts |>
+  left_join(total_trips_origin, by = "id") |>
+  ggplot(aes(fill = home_trips_share)) +
+  geom_sf(colour = NA) +
+  trips_kept_scale +
+  labs(title = "Origin trips", fill = "Trips kept (%)") +
+  theme_tfm_map
+
+# Join geometry and plot destination trips kept:
+mitma_districts |>
+  left_join(total_trips_destination, by = "id") |>
+  ggplot(aes(fill = home_trips_share)) +
+  geom_sf(colour = NA) +
+  trips_kept_scale +
+  labs(title = "Destination trips", fill = "Trips kept (%)") +
+  theme_tfm_map
+```
+
+We close the connection to the database:
+
+```{r}
+dbDisconnect(mitma_daily_con, shutdown = TRUE)
+```
+
+## NOTA:
+
+### Hourly bias (debería sacarlo)
+
+### Monthly bias (debería sacarlo)

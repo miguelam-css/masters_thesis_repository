@@ -1,0 +1,93 @@
+---
+title: "MITMS data download"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+In this document we download the trip data from MITMS using the `spanishoddata` R package.
+
+We are following the vignette available [here](https://cran.r-project.org/web/packages//spanishoddata/vignettes/convert.html#setup)
+
+> The choice between converting to DuckDB and Parquet could also be made based on how you plan to work with the data. Specifically whether you want to just download long periods or even all available data, or if you want to get the data gradually, as you progress through with the analysis.
+
+> - If you plan to work with long time periods, we recommend DuckDB, as it is one big file and it is easier to update it completely. For example you may be working with all 2020 data. Later you decide to add all of 2021 data. In this case it would be better to delete the database and create it from scratch.
+
+> - If you only want certain dates, analyse them and add additional dates later, Parquet may be better, as each day is saved in a separate file, just like the original CSV files. Therefore updating a folder of Parquet files is as easy as just creating a new file only for the missing date.
+
+> - If you only work with a few individual days, you may not notice the advantages of the DuckDB or Parquet formats. In this case, you can keep using the CSV.gz format for the analysis using the spod_get() function. This is also useful for quick tutorials, where you only need one or two days of data for demonstration purposes.
+
+Thus, we will be using DuckDB.
+
+## Set up
+
+Load the libraries:
+
+```{r}
+#| warning: false
+#| message: false
+
+library(spanishoddata)
+library(lubridate)
+```
+
+Set the data directory:
+
+```{r}
+spod_set_data_dir(data_dir = "../data/mitma")
+```
+
+### Valid dates in the period
+
+Before downloading, we make sure there are no invalid dates (some days may be missing due to mobile network outages).
+
+```{r}
+# We define the dates we want to download:
+dates_to_download <- c(
+  seq(as_date("2022-05-01"), as_date("2022-09-30")),
+  seq(as_date("2023-05-01"), as_date("2023-09-30"))
+  )
+
+# Obtain the valid dates from spanishoddata:
+valid_dates <- spod_get_valid_dates(ver = 2)
+
+# And find out if there are any dates in our study period that are invalid:
+invalid_dates <- dates_to_download[!c(dates_to_download %in% valid_dates)]
+
+invalid_dates
+```
+
+All the dates in our study period are valid.
+
+### Download
+
+We download the dates in our study period:
+
+```{r}
+spod_download(
+  type = "od",
+  zones = "districts",
+  dates = dates_to_download,
+  max_download_size_gb = 80, # The default value is 1GB, we need a bigger size
+  return_local_file_paths = FALSE) # To avoid getting all downloaded file paths
+                                   # printed to console
+```
+
+### Convert to DuckDB
+
+```{r}
+# Converts the data to .duckdb, and returns the .duckdb file path
+db <- spod_convert(
+  type = "od",
+  zones = "districts",
+  dates = dates_to_download,
+  save_format = "duckdb",
+  overwrite = TRUE,
+  max_n_cpu = 12, # Fewer than the default (all available cores but 1), so we
+                  # make sure our computer won't crash. This value may be
+                  # changed according to the computer
+  max_mem_gb = 8  # Same as above, may be adjusted according to the computer.
+)
+
+db
+```

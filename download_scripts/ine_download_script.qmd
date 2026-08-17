@@ -1,0 +1,26 @@
+---
+title: "INE data download"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+```{r}
+#| message: false
+#| warning: false
+
+# library(ineapir) # Won't use it, too slow
+```
+
+## Download income and population data from INE
+
+We download the income and population data from INE and save it into an .rds file.
+
+```{r}
+# Download income and population data from INE:
+income_adrh_raw <- read.csv2("https://ine.es/jaxiT3/files/t/es/csv_bdsc/30824.csv?nocab=1")
+saveRDS(income_adrh_raw, "../data/ine/income_adrh_raw.rds")
+
+dem_adrh_raw <- read.csv2("https://ine.es/jaxiT3/files/t/es/csv_bdsc/30832.csv?nocab=1")
+saveRDS(dem_adrh_raw, "../data/ine/dem_adrh_raw.rds")
+```

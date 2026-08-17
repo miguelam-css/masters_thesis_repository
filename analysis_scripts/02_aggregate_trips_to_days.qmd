@@ -1,0 +1,172 @@
+---
+title: "Building the daily mitma trips database"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+In this document we aggregate the hourly MITMS trips into daily trips, keeping every other column, and save the result as a DuckDB database (since the resulting table is too big to be loaded into the session memory). We work at the daily level following Renninger and Cabrera (2026), and because an hourly analysis exceeds the capacity of our computer, at least using `fixest`.
+
+```{r}
+#| message: false
+#| warning: false
+
+library(spanishoddata)
+library(dplyr)
+library(lubridate)
+library(DBI)
+library(duckdb)
+```
+
+## Connecting to the database
+
+Following the [reccomendations](https://cran.r-project.org/web/packages//spanishoddata/vignettes/convert.html#setup) of the the authors of the `spanishoddata` package, we converted the downloaded data with DuckDB to be able to perform analysis that does not fit in memory, which is our case.
+
+```{r}
+# Set the data directory:
+spod_set_data_dir("../data/mitma/")
+
+# Connect to the DuckDB database (see mitma_download_scrip.qmd).
+mitma_data <- spod_connect(
+  "../data/mitma/clean_data/v2/tabular/duckdb/od_distritos.duckdb",
+  max_n_cpu = 6, # Fewer than the default (all available cores but 1), so we
+                 # make sure our computer won't crash. This value may be
+                 # changed according to the computer
+  max_mem_gb = 4) # Same as above, may be adjusted according to the computer.
+
+# Glimpse the dataset to see column names:
+mitma_data |> 
+  head(10) |>
+  collect() |> 
+  glimpse()
+  
+```
+
+## Confirm dates
+
+We confirm that all the dates in our study period are in the DuckDB dataset, and that we have no dates outside of our study period.
+
+```{r}
+# We define the dates in our study period:
+study_period_dates <- c(
+  seq(as_date("2022-05-01"), as_date("2022-09-30")),
+  seq(as_date("2023-05-01"), as_date("2023-09-30"))
+  )
+
+# Get a vector with the dates the dataset has:
+mitma_dates <- mitma_data |>
+  distinct(date) |>
+  collect() |>
+  pull()
+
+# And find out if there are any dates in our study period missing from the
+# dataset:
+missing_dates <- study_period_dates[!c(study_period_dates %in% mitma_dates)]
+missing_dates
+
+# And if the dataset contains any date outside of our study period:
+extra_dates <- mitma_dates[!c(mitma_dates %in% study_period_dates)]
+
+extra_dates
+```
+
+The dataset contains all the dates in our study period, and no extra dates.
+
+## Aggregating hours into days:
+
+We aggregate the trips of all hours in a day to get daily trips, keeping all the other columns as grouping keys, so that we don't lose dimensions. In other words: we get the data per day instead of per hour.
+
+```{r}
+# We drop the hour column and group all the other ones except the two we want 
+# to aggregate (n_trips and trips_total_length_km):
+mitma_daily <- mitma_data |>
+  # Drop the hour column:
+  select(-hour) |>
+  # Group by everything except n_trip and lenght, which we want to aggregate:
+  group_by(across(!c(n_trips, trips_total_length_km))) |>
+  # And sum:
+  summarise(
+    "n_trips" = sum(n_trips),
+    "trips_total_length_km" = sum(trips_total_length_km),
+    .groups = "drop"
+    )
+```
+
+## Adding `home_trip` and `home_id` columns:
+
+We can only assign INE's income data to the trips that have origin or destination "home". We add two new variables: `home_trip` (tells us whether the trip includes "home" either as origin or destination) and `home_id` (giving us the id of the home district when `trip_home` is true):
+
+```{r}
+mitma_daily <- mitma_daily |>
+  mutate(
+    "home_trip" = case_when(
+      activity_origin == "home" ~ TRUE,
+      activity_destination == "home" ~ TRUE,
+      .default = FALSE),
+    "home_id" = case_when(
+      activity_origin == "home" ~ id_origin,
+      activity_destination == "home" ~ id_destination,
+      .default = NA)
+    )
+```
+
+It must be noted that there are no trips with origin and destination "home" in the dataset, thus there is no problem assigning INE's income (it would be a problem if there were this kind of trips between different districts. We confirm there are no home-home trips this below:
+
+```{r}
+# Confirm there are no trips from home to home:
+mitma_data |>
+  filter(activity_origin == "home" & activity_destination == "home") |>
+  count() |>
+  collect()
+```
+
+## Writing the duckDB database
+
+As can be seen below, `mitma_daily` contains over two thousand million rows, thus cannot be loaded into R, we will be working with lazy queries as we've done so far. But we will save the final dataset in order to avoid repeating the preprocessing at every step from now on.
+
+```{r}
+# Count rows:
+mitma_daily |>
+  count() |>
+  collect()
+```
+
+Following [Wickham et al. (2023, Section 21.3)](https://r4ds.hadley.nz/databases.html), we use the packages `DBI` and `duckdb` for this purpose.
+
+```{r}
+# dbConnect() opens the connection and returns the object we hand to every
+# other DBI function from here on:
+mitma_daily_con <- dbConnect(
+  duckdb(), # With no arguments it would give us a database in the session
+            # memory, which we would lose when the session ends
+  dbdir = "../data/mitma_daily/mitma_daily.duckdb" # So we get a file on the disk
+  )
+
+# We set the maximum cpu threads and RAM usage, as we did for the frist
+# DuckDB connection to avoid the computer crashing:
+dbExecute(mitma_daily_con, "SET memory_limit = '4GB'")
+dbExecute(mitma_daily_con, "SET threads = 6")
+```
+
+Becaues `dbWriteTable` requires a dataframe or tibble but we cannot collect the full `mitma_daily` due to its size, we run it day by day:
+
+```{r}
+# We need to convert study_period_dates to characters because the for loop 
+# drops the date class and converts to plain numbers, breaking the filter:
+study_period_dates <- as.character(study_period_dates)
+
+# We are now ready to run dbWriteTable() day by day:
+for (one_date in study_period_dates) {
+  # We collect each day:
+  one_day <- mitma_daily |>
+    filter(date == one_date) |>
+    collect()
+  # And pass it to dbWriteTable, appending it to the previous one:
+  dbWriteTable(mitma_daily_con, "mitma_daily", one_day, append = TRUE)
+}
+```
+
+```{r}
+dbDisconnect(mitma_daily_con, shutdown = TRUE)
+spod_disconnect(mitma_data)
+```

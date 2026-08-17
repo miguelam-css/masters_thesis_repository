@@ -1,0 +1,63 @@
+---
+title: "Move the canary islands in the MITMS geometries"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+The geometries provided by the `spanishoddata` R package have the Canary islands in their actual geographical position. In this document we move them using `esp_move_can()` from the `mapSpain` package, and save the resulting data in an .rds file which we will load whenever we need to plot a map.
+
+```{r}
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(stringr)
+library(sf)
+library(spanishoddata)
+library(mapSpain)
+library(ggplot2)
+```
+
+## Load the geometries
+
+```{r}
+# Set the data directory:
+spod_set_data_dir("../data/mitma/")
+
+# Download the MITMS districts geometries:
+mitma_districts <- spod_get_zones(zones = "districts", ver = 2)
+
+# Drop the Portuguese, French, and "external" zones: their ids are "external"
+# or start with "PT" or "FR" instead of a digit:
+mitma_districts <- mitma_districts |>
+  filter(str_starts(id, "\\d"))
+```
+
+## Move the Canary Islands with mapSpain
+
+```{r}
+# We move the canary islands using esp_move_can() from mapSpain:
+canarias <- mitma_districts |>
+  filter(str_starts(id, "35|38")) |>  # We keep the Canary Islands only
+  esp_move_can(moveCAN = TRUE) # And move them
+
+# Remove the old canary islands and bind the rows of their adjusted geometry:
+mitma_districts <- mitma_districts |>
+  filter_out(str_starts(id, "35|38")) |>  # Remove the old canary islands
+  bind_rows(canarias) # Add the moved canary islands
+```
+
+```{r}
+# Check it worked:
+ggplot(mitma_districts) +
+  geom_sf()
+```
+
+## Save the geometries
+
+```{r}
+# Every map in the thesis reads this file, so that all of them use exactly the
+# same geometry, moved the same way:
+saveRDS(mitma_districts, "../data/mitma_geometries_moved_can.rds")
+```

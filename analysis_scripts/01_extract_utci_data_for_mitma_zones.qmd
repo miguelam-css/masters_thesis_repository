@@ -1,0 +1,173 @@
+---
+title: "Extracting UTCI for MITMS zones"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+In this document we extract the UTCI of each MITMS zone for each hour in our study period. Since some zones fall in areas covered by two cells of the UTCI raster, we compute the weighted UTCI based on the area of the district that falls within each cell. We save the result in an .rds file.
+
+
+```{r}
+#| message: false
+#| warning: false
+
+library(sf)
+library(terra)
+library(spanishoddata)
+library(dplyr)
+library(stringr)
+library(purrr)
+library(lubridate)
+library(exactextractr)
+```
+
+## Checking the data for 1 day
+
+> “ERA5 provides consistent time series of multiple climate variables. Each time series is a sequence of spatial grids at 0.25° resolution (approximately 31 km at the equator) and hourly intervals.” (Di Napoli et al., 2021, p. 4)
+
+> “To ease transmission and retrieval from the database stacks are packaged in files of 24 hourly layers covering the full day period (00-23UTC). Layers are defined on a regular grid in the World Geodetic System 1984 (WGS 84). Each grid is made of 601 rows and 1,440 columns. MRT and UTCI data are stored in Kelvin (K). They can be converted into degree Celsius (°C) by subtracting 273.15.” (Di Napoli et al., 2021, p. 4)
+
+We verify the data is correct checking one day (the first in our study period, 1st of May 2022):
+
+```{r}
+first_day_raster <- rast("../data/utci/peninsula/ECMWF_utci_20220501_v1.1_con.area-subset.44.25.4.75.35.-9.75.nc")
+first_day_raster
+```
+
+```{r}
+plot(first_day_raster, maxnl = 24)
+```
+
+This confirms the resolution of 0.25º, the 24 data divided in 24 hours, and the use of WGS 84. We also see that the variable is named `utci`, and that the values are expressed in kelvin, with values in the hundreds.
+
+## Extracting UTCI for every district and hour
+
+We start by downloading MITMS districts geometries and checking its coordinate reference system (CRS):
+
+```{r}
+# Set the data directory:
+spod_set_data_dir("../data/mitma/")
+
+# Download the MITMS districts geometries
+mitma_districts <- spod_get_zones(zones = "districts", ver = 2)
+
+# As the codebook states, it uses a projected CRS:
+st_crs(mitma_districts)
+```
+
+So we transform it into EPSG:4326 (WGS 84):
+
+```{r}
+mitma_districts <- mitma_districts |> 
+  st_transform("EPSG:4326") |> 
+  st_make_valid() # To make geometries valid after changing
+                  # the projection
+```
+
+We drop the "external", portuguese and french districts, which are not part of our study:
+
+```{r}
+# Drop the Portuguese, French, and "external" zones, their ids are "external"
+# or start with "PT" or "FR" instead of a digit:
+districts <- mitma_districts |>
+  filter(str_starts(id, "\\d"))
+```
+
+Since, in order to make a lighter download, we downloaded the UTCI data separately for the Canary Islands and the Peninsula and Balearic Islands, we will need to merge both rasters (sets of rasters). We start by creating two vectors with the file names of the rasters for both areas, in order to later merge them:
+
+```{r}
+# Peninsula and Balearic Islands file names:
+peninsula_files <- list.files(
+  "../data/utci/peninsula",
+  full.names = TRUE
+  )
+
+# CAnary Islands file names:
+canary_files <- list.files(
+  "../data/utci/canary",
+  full.names = TRUE
+  )
+```
+
+For each UTCI file (each file represents a day) we will extract the mean UTCI of every district, for each of the 24 hours. Following Lovelace et al., we use the `exactextractr`package, which “offers a significantly faster alternative for extracting pixel values through the `exact_extract()` function”; this function “always computes the coverage fraction of the polygon in each cell”. ([Lovelace et al., 2019, Section 6.3](https://r.geocompx.org/raster-vector.html)). In other words, when calculating the mean UTCI for each district, it weights every raster cell by the fraction of its area that falls inside the the district's polygon.
+
+```{r}
+# We define a function that we will run once per UTCI file (that is, per day)
+extract_utci_per_mitma <- function(peninsula_file, canary_file, districts) {
+
+  # Load the rasters for both areas:
+  canary_raster <- rast(canary_file)
+  peninsula_raster <- rast(peninsula_file)
+  
+  # Merge both rasters in a single raster:
+  day_raster <- merge(canary_raster, peninsula_raster)
+
+  # Create a dataframe with one row per district, and one column per hour
+  utci_mitma_hourly_means <- exact_extract(
+    x = day_raster,
+    y = districts,
+    "mean") # The mean cell value, weighted by the fraction of
+            # each cell that is covered by the polygon, this is a summary
+            # function supported by exact_extract that can be passed as 
+            # an argument.
+
+  # Because exact_extract by itself returns a column per layer (hour) and a row 
+  # per district, in the order it receives them, but there is no column with 
+  # the district id or the date, we need to create them:
+  utci_mitma_hourly_means |>
+    mutate(
+      # Copy the district id:
+      mitma_zone_id = districts$id,
+      # Get the date for each row:
+      date = as_date(time(day_raster)[1])
+      )
+}
+```
+
+And we run the extraction:
+
+```{r}
+# With map2() we take both vectors (peninsula_files and canary_files) and
+# run the function we defined above, wich merges them and extracts the mean
+# UTCI for each MITMS district. Since map2() returns a list of tables,
+# one table per day, we merge them into a single table using bind_rows()
+utci_per_mitma <- map2(
+  peninsula_files, # The vector of the peninsula files (one per day)
+  canary_files, # The vector of the canary files (same one per day structure)
+  extract_utci_per_mitma, # The function defined above
+  districts = districts # We use the same districts for all days 
+  ) |>
+  bind_rows()
+```
+
+The columns have the names of the raster layers (`mean.utci_1`, `mean.utci_2`, etc.), we rename them:
+
+```{r}
+# Create a vector with the new column names:
+hours <- c(paste0("h", 0:23))
+
+# And rename the columns:
+utci_per_mitma <- utci_per_mitma |>
+  # Rename:
+  set_names(c(hours, "mitma_zone_id", "date")) |>
+  # Put id and dates as the first two:
+  relocate(mitma_zone_id, date, c(1:24))
+```
+
+Finally, we convert the data from Kelvin to Celsius degrees by subtracting 273.15:
+
+```{r}
+# Define the conversion function to use with across():
+kelvin_to_celsius <- function(x) {x - 273.15}
+
+# And convert to Celsius:
+utci_per_mitma <- utci_per_mitma |>
+  mutate(across(starts_with("h"), kelvin_to_celsius))
+```
+
+And save the table:
+
+```{r}
+saveRDS(utci_per_mitma, "../data/mitma_zones_utci_added/utci_per_mitma.rds")
+```

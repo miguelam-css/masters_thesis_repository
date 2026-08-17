@@ -1,0 +1,109 @@
+---
+title: "Choosing the UTCI hour"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+In their models, Renninger and Cabrera “use zonal statistics to compute the mean UTCI at 16:00 for each district on each day.” (Renninger and Cabrera, 2026, Supplementary Material, p. 2). We would like to follow their decision here, however, it is not clear what 16:00 means, and it isn't specified anywhere. It could either be 16:00 UTC or 16:00 local time.
+
+In order to take this decision, in this document we check at what time districts reach their peak UTCI to decide what hour to use. As can be seen below, the result is 14:00 UTC (16:00 local).
+
+
+```{r}
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# We defined a custom theme for all the figures in the masters thesis:
+source("../dataviz_theme/theme_tfm.R")
+```
+
+
+
+We load the dataset with the hourly UTCI by MTIMA zone:
+
+```{r}
+utci_per_mitma <- readRDS("../data/mitma_zones_utci_added/utci_per_mitma.rds")
+
+glimpse(utci_per_mitma)
+```
+
+We average each hour column, so that every district gets their mean per hour:
+
+```{r}
+utci_district_means <- utci_per_mitma |>
+  group_by(mitma_zone_id) |>
+  summarise(across(starts_with("h"), mean))
+```
+
+And pivot longer, turning the column names (`h0`, `h1`, etc.) into an hour number so that it can be a continuous axis:
+
+```{r}
+utci_hour_mean <- utci_district_means |>
+  pivot_longer(
+    cols = starts_with("h"),
+    names_to = "hour",
+    # Drop the "h":
+    names_prefix = "h",
+    # An read the rest as integer:
+    names_transform = as.integer,
+    values_to = "mean_utci")
+```
+
+We also compute the average of all districts, to have a readable line on top of everything:
+
+```{r}
+overall_utci_hour_mean <- utci_hour_mean |>
+  group_by(hour) |>
+  summarise("mean_utci" = mean(mean_utci))
+```
+
+And plot:
+
+```{r}
+ggplot(utci_hour_mean,
+       aes(x = hour, y = mean_utci)) +
+
+  # Vertical lines at 14:00 UTC (16:00 local) and 16:00 UTC (18:00 local):
+  geom_vline(xintercept = c(14, 16),
+             linetype = "dashed",
+             colour = "grey50") +
+
+  # One line per district to have an idea of the general shape:
+  geom_line(aes(group = mitma_zone_id),
+            # Grey, so that the mean is the only thing carrying colour:
+            colour = alpha("grey50", 0.05),
+            linewidth = 0.2) +
+
+  # The average of all districts on top: we put a thicker white line with
+  # some alpha underneath so that it looks a little brighter.
+  geom_line(data = overall_utci_hour_mean,
+            colour = "white", alpha = 0.7,
+            linewidth = 1.7) +
+  geom_line(data = overall_utci_hour_mean,
+            # The orange of Dark2:
+            colour = "#D95F02",
+            linewidth = 1.1) +
+
+  scale_x_continuous(breaks = seq(0, 23, 3)) +
+  labs(
+    x = "Hour of the day (UTC)",
+    y = "Mean UTCI over the period (°C)") +
+
+  theme_tfm
+```
+
+Find out exactly when most districts reach their Revpeak UTCI:
+
+```{r}
+utci_hour_mean |>
+  slice_max(mean_utci, by = mitma_zone_id, n = 1) |>
+  count(hour, name = "n_districts") |> 
+  slice_max(n_districts, n = 5)
+```
+
+The hour when most districts reach their peak UTCI is 14:00 UTC, that is 16:00 local time, followed by 13:00 UTCI (15:00 local) and 15:00 UTC (17:00 local). We will thus be using 14:00 UTC (16:00 local).
