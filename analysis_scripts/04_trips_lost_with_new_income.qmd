@@ -36,9 +36,10 @@ mitma_daily_con <- dbConnect(
   read_only = TRUE # We won't edit the database in this script
   )
 
-# Limit CPU threads and RAM:
-dbExecute(mitma_daily_con, "SET memory_limit = '6GB'")
-dbExecute(mitma_daily_con, "SET threads = 6")
+# We set the maximum CPU threads and RAM usage, we are working on a powerful
+# computer, these values should be adapted to your machine:
+dbExecute(mitma_daily_con, "SET memory_limit = '128GB'")
+dbExecute(mitma_daily_con, "SET threads = 24")
 
 # Load the lazy table:
 mitma_daily <- tbl(mitma_daily_con, "mitma_daily")

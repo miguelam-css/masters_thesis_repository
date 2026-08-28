@@ -5,7 +5,7 @@ format: html
 editor: visual
 ---
 
-In this document we aggregate the hourly MITMS trips into daily trips, keeping every other column, and save the result as a DuckDB database (since the resulting table is too big to be loaded into the session memory). We work at the daily level following Renninger and Cabrera (2026), and because an hourly analysis exceeds the capacity of our computer, at least using `fixest`.
+In this document we aggregate the hourly MITMS trips into daily trips, keeping every other column, and save the result as a DuckDB database (since the resulting table is too big to be loaded into the session memory). We work at the daily level following Renninger and Cabrera (2026), and because an hourly analysis exceeds the capacity of our computer.
 
 ```{r}
 #| message: false
@@ -29,10 +29,10 @@ spod_set_data_dir("../data/mitma/")
 # Connect to the DuckDB database (see mitma_download_scrip.qmd).
 mitma_data <- spod_connect(
   "../data/mitma/clean_data/v2/tabular/duckdb/od_distritos.duckdb",
-  max_n_cpu = 6, # Fewer than the default (all available cores but 1), so we
-                 # make sure our computer won't crash. This value may be
-                 # changed according to the computer
-  max_mem_gb = 4) # Same as above, may be adjusted according to the computer.
+  # We set the maximum CPU threads and RAM usage, we are working on a powerful
+  # computer, these values should be adapted to your machine:
+  max_n_cpu = 12,
+  max_mem_gb = 64)
 
 # Glimpse the dataset to see column names:
 mitma_data |> 
@@ -142,10 +142,10 @@ mitma_daily_con <- dbConnect(
   dbdir = "../data/mitma_daily/mitma_daily.duckdb" # So we get a file on the disk
   )
 
-# We set the maximum cpu threads and RAM usage, as we did for the frist
-# DuckDB connection to avoid the computer crashing:
-dbExecute(mitma_daily_con, "SET memory_limit = '4GB'")
-dbExecute(mitma_daily_con, "SET threads = 6")
+# We set the maximum CPU threads and RAM usage, we are working on a powerful
+# computer, these values should be adapted to your machine:
+dbExecute(mitma_daily_con, "SET memory_limit = '64GB'")
+dbExecute(mitma_daily_con, "SET threads = 12")
 ```
 
 Becaues `dbWriteTable` requires a dataframe or tibble but we cannot collect the full `mitma_daily` due to its size, we run it day by day:

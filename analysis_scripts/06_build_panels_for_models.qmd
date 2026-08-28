@@ -5,7 +5,7 @@ format: html
 editor: visual
 ---
 
-In this document we build the panels the models need. We take the daily trips dataset, and attach to each row the UTCI of the district where the trip ends and the INE income of the district where the traveller lives. We then aggregate the trips arriving at each district on each day, grouping by all the vairables we will need for the models in order to keep them. The result is a table with one row per district, day and combination of those variables. We build first the panel for research question 3, which keeps age and sex and then obtain the smaller panel for research questions 1 and 2 from the bigger one. The first one is saved as a DuckDB database because it does not fit session memory, the second one is saved in an .rds file.
+In this document we build the panels the models need. We take the daily trips dataset, and attach to each row the UTCI of the district where the trip ends and the INE income of the district where the traveller lives. We then aggregate the trips arriving at each district on each day, grouping by all the vairables we will need for the models in order to keep them. The result is a table with one row per district, day and combination of those variables. We build first the panel for research question 3, which keeps age and sex and then obtain the smaller panel for research questions 1 and 2 from the bigger one. The first one is saved as a DuckDB database for reproducibility reasons: most personal computers won't be able to work with the dataset in the session memory, the second and smaller one is saved in an .rds file.
 
 ```{r}
 #| message: false
@@ -28,10 +28,10 @@ mitma_daily_con <- dbConnect(
   read_only = TRUE # We won't edit the database in this script
   )
 
-# Limit CPU threads and RAM. We open a second connection below, so we set
-# lower limits than we did in previous scripts:
-dbExecute(mitma_daily_con, "SET memory_limit = '4GB'")
-dbExecute(mitma_daily_con, "SET threads = 6")
+# We set the maximum CPU threads and RAM usage, we are working on a powerful
+# computer, these values should be adapted to your machine:
+dbExecute(mitma_daily_con, "SET memory_limit = '64GB'")
+dbExecute(mitma_daily_con, "SET threads = 12")
 
 # Load the lazy table:
 mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
@@ -81,21 +81,23 @@ We will build the panel we need to answer research question 3, since it is the b
 - `ine_income_bracket` and `ine_income_tercile`: the income from INE.
 - `utci`: the temperature.
 
-Since the result doesn't fit our RAM memory, we write it in a new DuckDB.
+Since the whole panel won't fit the memory of most personal computers, we write it in a new DuckDB for reproducibility.
 
 ```{r}
 # We open a second connection, for writing the result. It gets its own RAM and
 # CPU limits, lower than they'd be if we only had one connection open:
 model_panel_con <- dbConnect(
-  duckdb(),
-  dbdir = "../data/model_panel/model_panel.duckdb"
+  duckdb(),-
+  dbdir = "../data/model_panels/model_panel.duckdb"
   )
 
-dbExecute(model_panel_con, "SET memory_limit = '4GB'")
-dbExecute(model_panel_con, "SET threads = 6")
+# We set the maximum CPU threads and RAM usage, we are working on a powerful
+# computer, these values should be adapted to your machine:
+dbExecute(model_panel_con, "SET memory_limit = '64GB'")
+dbExecute(model_panel_con, "SET threads = 12")
 ```
 
-Since `dbWriteTable()` needs a real data frame and the whole panel does not fit in our RAM memory, we write it day by day, as we did when building `mitma_daily`.
+Since `dbWriteTable()` needs a real data frame and the whole panel does not fit most personal computers RAM memory, we write it day by day, as we did when building `mitma_daily`.
 
 ```{r}
 # The dates of the study period. They have to be characters: the for loop 
@@ -167,7 +169,7 @@ glimpse(trips_panel)
 This one is small enough to be saved as an .rds and comfortably loaded into the session memory:
 
 ```{r}
-saveRDS(trips_panel, "../data/model_panel/trips_panel.rds")
+saveRDS(trips_panel, "../data/model_panels/trips_panel.rds")
 ```
 
 We are done with both databases, so we close the DuckDB connections.
