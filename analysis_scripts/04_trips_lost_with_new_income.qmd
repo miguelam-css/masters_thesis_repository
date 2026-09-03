@@ -45,6 +45,15 @@ dbExecute(mitma_daily_con, "SET threads = 24")
 mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
 ```
 
+## Drop Canary Islands:
+
+Following Renninger and Cabrera (2026), we don't use data from the Canary Islands, so we drop it.
+
+```{r}
+mitma_daily <- mitma_daily |> 
+  filter(!str_starts(id_destination, "35|38"))
+```
+
 ## How many trips have home as origin or destination
 
 ```{r}
@@ -194,8 +203,12 @@ Finally, we plot a map to check whether there is geographical bias in the missin
 We first load the MITMS district geometries:
 
 ```{r}
-# We load the file we created with moved Canary Islands:
+# Load the file:
 mitma_districts <- readRDS("../data/mitma_geometries_moved_can.rds")
+
+# And drop the Canary Islands:
+mitma_districts <- mitma_districts |> 
+  filter(!str_starts(id, "35|38"))
 ```
 
 We aggregate the trips from the duckDB grouping by `id_origin` and `id_destination`:
