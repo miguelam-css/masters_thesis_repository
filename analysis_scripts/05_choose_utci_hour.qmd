@@ -9,7 +9,6 @@ In their models, Renninger and Cabrera “use zonal statistics to compute the me
 
 In order to take this decision, in this document we check at what time districts reach their peak UTCI to decide what hour to use. As can be seen below, the result is 14:00 UTC (16:00 local).
 
-
 ```{r}
 #| message: false
 #| warning: false
@@ -17,17 +16,20 @@ In order to take this decision, in this document we check at what time districts
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(stringr)
 
 # We defined a custom theme for all the figures in the masters thesis:
 source("../dataviz_theme/theme_tfm.R")
 ```
 
-
-
 We load the dataset with the hourly UTCI by MTIMA zone:
 
 ```{r}
 utci_per_mitma <- readRDS("../data/mitma_zones_utci_added/utci_per_mitma.rds")
+
+# Following Renninger and Cabrera, we drop the Canary Islands:
+utci_per_mitma <- utci_per_mitma |> 
+  filter(!str_starts(mitma_zone_id, "35|38"))
 
 glimpse(utci_per_mitma)
 ```
