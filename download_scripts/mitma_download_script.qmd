@@ -86,7 +86,7 @@ db <- spod_convert(
   max_n_cpu = 12, # Fewer than the default (all available cores but 1), so we
                   # make sure our computer won't crash. This value may be
                   # changed according to the computer
-  max_mem_gb = 8  # Same as above, may be adjusted according to the computer.
+  max_mem_gb = 64 # Same as above, may be adjusted according to the computer.
 )
 
 db
