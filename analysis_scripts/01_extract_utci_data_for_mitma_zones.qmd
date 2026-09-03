@@ -169,5 +169,9 @@ utci_per_mitma <- utci_per_mitma |>
 And save the table:
 
 ```{r}
+# Create the directory to save the file there:
+dir.create("../data/mitma_zones_utci_added", showWarnings = FALSE,
+           recursive = TRUE)
+
 saveRDS(utci_per_mitma, "../data/mitma_zones_utci_added/utci_per_mitma.rds")
 ```
