@@ -35,6 +35,11 @@ dbExecute(mitma_daily_con, "SET threads = 12")
 
 # Load the lazy table:
 mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
+
+# Following Renninger and Cabrera (2026) we exclude the Canary Islands from
+# our analysis, so we drop them:
+mitma_daily <- mitma_daily |> 
+  filter(!str_starts(id_destination, "35|38"))
 ```
 
 ## Load UTCI and income tables
@@ -85,9 +90,14 @@ Since the whole panel won't fit the memory of most personal computers, we write 
 
 ```{r}
 # We open a second connection, for writing the result. It gets its own RAM and
-# CPU limits, lower than they'd be if we only had one connection open:
+# CPU limits, lower than they'd be if we only had one connection open.
+
+# Create the directory:
+dir.create("../data/model_panels", showWarnings = FALSE, recursive = TRUE)
+
+# And the duckDB connection:
 model_panel_con <- dbConnect(
-  duckdb(),-
+  duckdb(),
   dbdir = "../data/model_panels/model_panel.duckdb"
   )
 
