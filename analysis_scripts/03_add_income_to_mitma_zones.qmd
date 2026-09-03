@@ -334,5 +334,9 @@ income_data <- income_data |>
 ## Save the dataset
 
 ```{r}
+# Create the directory to save the file there:
+dir.create("../data/mitma_zones_income_added", showWarnings = FALSE,
+           recursive = TRUE)
+
 saveRDS(income_data, "../data/mitma_zones_income_added/income_data.rds")
 ```
