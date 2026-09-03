@@ -57,6 +57,9 @@ ggplot(mitma_districts) +
 ## Save the geometries
 
 ```{r}
+# Create the directory to save the file there:
+dir.create("../data", showWarnings = FALSE, recursive = TRUE)
+
 # Every map in the thesis reads this file, so that all of them use exactly the
 # same geometry, moved the same way:
 saveRDS(mitma_districts, "../data/mitma_geometries_moved_can.rds")
