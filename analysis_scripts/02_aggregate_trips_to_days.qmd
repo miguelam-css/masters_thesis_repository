@@ -134,6 +134,9 @@ mitma_daily |>
 Following [Wickham et al. (2023, Section 21.3)](https://r4ds.hadley.nz/databases.html), we use the packages `DBI` and `duckdb` for this purpose.
 
 ```{r}
+# Create the directory to save the database there:
+dir.create("../data/mitma_daily", showWarnings = FALSE, recursive = TRUE)
+
 # dbConnect() opens the connection and returns the object we hand to every
 # other DBI function from here on:
 mitma_daily_con <- dbConnect(
