@@ -17,7 +17,10 @@ editor: visual
 We download the income and population data from INE and save it into an .rds file.
 
 ```{r}
-# Download income and population data from INE:
+# Create the directory where the file will be stored:
+dir.create("../data/ine", showWarnings = FALSE, recursive = TRUE)
+
+# Download income and population data from INE, and save them:
 income_adrh_raw <- read.csv2("https://ine.es/jaxiT3/files/t/es/csv_bdsc/30824.csv?nocab=1")
 saveRDS(income_adrh_raw, "../data/ine/income_adrh_raw.rds")
 
