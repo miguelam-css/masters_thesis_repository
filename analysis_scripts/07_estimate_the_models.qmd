@@ -29,7 +29,7 @@ trips_panel <- readRDS("../data/model_panels/trips_panel.rds")
 glimpse(trips_panel)
 ```
 
-## Models
+## Reproduction and RQ1 models
 
 ### Model A: all trips, MITMS income
 
@@ -65,7 +65,7 @@ panel_all_trips_mitms_income |> summarise(across(everything(), ~ sum(is.na(.x)))
 # There are no NAs 
 ```
 
-While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating some swap memory (they require around 41GB of RAM to run, we recommend making sure you have some more than that if that's your case). We save the .rds files because that allows personal computers to keep as much RAM as possible free for `fepois()` by restarting R session before each model's chunk, and just reading the RDS file and running `fepois()`.
+While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating some swap memory (they require nearly 40GB of RAM to run, we recommend making sure you have some more than that if that's your case). We save the .rds files because that allows personal computers to keep as much RAM as possible free for `fepois()` by restarting R session before each model's chunk, and just reading the RDS file and running `fepois()`.
 
 ```{r}
 # To allow  fepois() to run in a session with as much free RAM as possible, 
@@ -107,7 +107,6 @@ model_all_trips_mitms_income <- readRDS("../data/models/model_all_trips_mitms_in
 etable(model_all_trips_mitms_income)
 ```
 
-## SEGUIR REVISANDO DESDE AQUÍ
 
 ### Model B: home trips, MITMS income
 
@@ -238,7 +237,7 @@ panel_home_trips_ine_income |>
     mutate("pct_trips" = trips / sum(trips) * 100)
 ```
 
-We find NAs in `ine_income_bracket`, as expected, since there were some MITMS zones that didn't include INE section codes. The amount of NAs, however, is residual, they represent just 0.035% of the trips. We drop them and save the .rds file.
+We find NAs in `ine_income_bracket`, as expected, since there were some MITMS zones that didn't include INE section codes. The amount of NAs, however, is residual, they represent just 0.034% of the trips. We drop them and save the .rds file.
 
 ```{r}
 # Drop the NAs:
@@ -368,8 +367,12 @@ etable(model_home_trips_ine_terciles)
 ### Export models A, B, C, D to LaTeX
 
 We load the four models results and export to LaTeX format using `etable()`, provided by `fixest` for this purpose. We are following [Berge's (2026) vignette on exporting estimation tables](https://cran.r-project.org/web/packages/fixest/vignettes/exporting_tables.html).
+
+
 ```{r}
-library(fixest)
+# If working on a personal computer, restart R before running this chunk.
+
+library(fixest) # Needed for users that restart R before running.
 
 model_all_trips_mitms_income <- readRDS("../data/models/model_all_trips_mitms_income.rds")
 model_home_trips_mitms_income <- readRDS("../data/models/model_home_trips_mitms_income.rds")
@@ -466,7 +469,8 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
 }
 ```
 
-### Model RQ3
+
+## RQ3 models SIGO REVISANDO DESDE AQUÍ
 
 To answer RQ3 we need `age` and `sex`, so we connect to the DuckDB panel. We **restart R** and connect to it:
 
@@ -481,20 +485,22 @@ model_panel_con <- dbConnect(
   read_only = TRUE
   )
 
+# Adjust these parameters according to your computer:
 dbExecute(model_panel_con, "SET memory_limit = '200GB'")
 dbExecute(model_panel_con, "SET threads = 48")
 
 trips_panel_demographic <- tbl(model_panel_con, "trips_panel_demographic")
 ```
 
-Since compared to the previous models we are adding two variables with 3 categories (`sex`) and 5 categories (`age`), the resulting dataset is so big that `fepois()` crashes when we try to give it the full dataset all at once (see the failed attempt in the following two chunks):
+Since compared to the previous models we are adding two variables with 3 categories (`sex`) and 5 categories (`age`), the resulting dataset is so big that `fepois()` crashes when we try to give it the full dataset all at once (see the failed attempt in the following chunks):
 
 ```{r}
 panel_rq3 <- trips_panel_demographic |>
   # Keep only trips with origin or destination home, and UTCI between
   # 25 and 50:
-  filter(home_trip == TRUE,
-         utci >= 25, utci < 50) |>
+  filter(home_trip == TRUE, 
+         utci >= 25,
+         utci < 50) |>
   # Group by the terciles of the INE income, and by age and sex:
   group_by(date, id_destination, 
            province, # Needed for the cluster
@@ -519,34 +525,6 @@ saveRDS(panel_rq3, "../data/model_panels/panel_rq3.rds")
 
 dbDisconnect(model_panel_con, shutdown = TRUE)
 ```
-
-We **restart R** again, so that `fepois()` starts with as much space as possible:
-
-```{r}
-library(fixest)
-
-panel_rq3 <- readRDS("../data/model_panels/panel_rq3.rds")
-
-model_rq3 <- fepois(
-  fml = n_trips ~ activity_destination * ine_income_tercile * age * sex +
-    i(utci_bins, ref = "25-30"):activity_destination:ine_income_tercile:age:sex |
-    date + id_destination,
-  data = panel_rq3,
-  cluster = ~province,
-  # Clean intermediary objects as much as possible to free RAM space:
-  mem.clean = TRUE,
-  nthreads = 48 # Set this value according to your computer
-  )
-
-# And we save it straight away, to avoid losing hours of computation:
-saveRDS(model_rq3, "../data/models/model_rq3.rds")
-```
-
-We get the following error:
-
-> Error: in fepois(fml = n_trips \~ activity_destination \* ine...: Evaluation of the right-hand-side of the formula raises an error: cannot allocate vector of size 240.6 Gb
-
-For this reason, we break the model down into pieces: one model per combination of destination activity and age group, sixteen in total, each of them allows us to look at the intersection of `bins × income tercile × sex`. This means we cannot make claims about the contrast between activities or between age groups, but it allows us to make claims about the difference between sex and income crosses inside an age group and activity.
 
 ```{r}
 library(dplyr)
@@ -614,6 +592,47 @@ And drop the missing trips:
 ```{r}
 # Drop the raws with missing data:
 panel_rq3 <- panel_rq3 |> drop_na()
+
+# And save the clean panel, so that the models start from it:
+saveRDS(panel_rq3, "../data/model_panels/panel_rq3_clean.rds")
+```
+
+We **restart R** again, so that `fepois()` starts with as much space as possible:
+
+```{r}
+library(fixest)
+
+panel_rq3 <- readRDS("../data/model_panels/panel_rq3_clean.rds")
+
+model_rq3 <- fepois(
+  fml = n_trips ~ activity_destination * ine_income_tercile * age * sex +
+    i(utci_bins, ref = "25-30"):activity_destination:ine_income_tercile:age:sex |
+    date + id_destination,
+  data = panel_rq3,
+  cluster = ~province,
+  # Clean intermediary objects as much as possible to free RAM space:
+  mem.clean = TRUE,
+  nthreads = 48 # Set this value according to your computer
+  )
+
+# And we save it:
+saveRDS(model_rq3, "../data/models/model_rq3.rds")
+```
+
+
+We get the following error:
+
+> Error: in fepois(fml = n_trips \~ activity_destination \* ine...: Evaluation of the right-hand-side of the formula raises an error: cannot allocate vector of size 240.6 Gb
+
+For this reason, we break the model down into pieces: one model per combination of destination activity and age group, sixteen in total, each of them allows us to look at the intersection of `bins × income tercile × sex`. This means we cannot make claims about the contrast between activities or between age groups, but it allows us to make claims about the difference between sex and income crosses inside an age group and activity.
+
+We **restart R** once more and load the clean panel again:
+
+```{r}
+library(dplyr)
+library(fixest)
+
+panel_rq3 <- readRDS("../data/model_panels/panel_rq3_clean.rds")
 ```
 
 We run the 16 models using for loop:
