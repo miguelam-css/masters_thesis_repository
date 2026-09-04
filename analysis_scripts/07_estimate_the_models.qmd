@@ -5,11 +5,11 @@ format: html
 editor: visual
 ---
 
-Since the panels are too big, this script was run part by part in our computer to avoid crashes. We needed to set 32GB of swap on top of our 16GB RAM to be able to run the models below. Each panel is built, saved, and then estimated in a session that has just been restarted, so that the model starts with as much free memory as it can get; the text says where to restart R.
+\[REVISAR LA PROSA CUANDO TERMINE DE EDITAR EL DOCUMENTO\] Since the panels are too big, this script was run part by part in our computer to avoid crashes. We needed to set 32GB of swap on top of our 16GB RAM to be able to run the models below. Each panel is built, saved, and then estimated in a session that has just been restarted, so that the model starts with as much free memory as it can get; the text says where to restart R.
 
-We start with the four models that answer research questions 1 and 2. They share the same formula and differ only in the income variable and the sample: model A uses MITMS's income on every trip, model B uses the same income but only for trips with destination or origin home, model C uses the sames income brackets that MITMS does but with income data from INE, and model D uses income terciles.
+\[REVISAR LA PROSA CUANDO TERMINE DE EDITAR EL DOCUMENTO\] We start with the four models that answer research questions 1 and 2. They share the same formula and differ only in the income variable and the sample: model A uses MITMS's income on every trip, model B uses the same income but only for trips with destination or origin home, model C uses the sames income brackets that MITMS does but with income data from INE, and model D uses income terciles.
 
-We then run the models for research quetsion 3, which adds age and sex. We couldn't fit the full dataset in the session memory, so we broke it down into parts: one model for each combination of destination activity and age group (16 models).
+\[REVISAR LA PROSA CUANDO TERMINE DE EDITAR EL DOCUMENTO\] We then run the models for research quetsion 3, which adds age and sex. We couldn't fit the full dataset in the session memory, so we broke it down into parts: one model for each combination of destination activity and age group (16 models).
 
 ```{r}
 #| message: false
@@ -24,19 +24,23 @@ library(fixest)
 ## Loading the data
 
 ```{r}
-trips_panel <- readRDS("../data/model_panel/trips_panel.rds")
+trips_panel <- readRDS("../data/model_panels/trips_panel.rds")
 
 glimpse(trips_panel)
 ```
 
 ## Models
 
-### Model A
+### Model A: all trips, MITMS income
 
 We build the final panel for model a, this one keeps MITMS's own income variable and every trip (we don't exclude non-home trips in this first model), so the two INE income variables and `home_trip` are summed away. Following Renninger and Cabrera (2026, Supplementary Material, p.7) we turn the UTCI variable into five equal bins from 25 to 50 degrees Celsius, using the 25-30 bin as our reference category.
 
 ```{r}
-panel_a <- trips_panel |>
+panel_all_trips_mitms_income <- trips_panel |>
+  # The trips ending abroad have no utci, and they are not part of our study:
+  filter(!is.na(utci)) |>
+  # Neither are the days outside our bins, below 25 °C or above 50 °C:
+  filter(utci >= 25, utci < 50) |>
   # Group by the original MITMS income:
   group_by(date, id_destination,
            province, # Needed for the cluster 
@@ -51,75 +55,80 @@ panel_a <- trips_panel |>
       utci < 45 ~ "40-45",
       utci < 50 ~ "45-50")
   ) |>
-  # Drop what falls outside the bins: the days below 25 °C and the trips
-  # ending abroad (because they have no utci), these are not part of our study:
-  filter(!is.na(utci_bins)) |>
   select(!utci)
 
-glimpse(panel_a)
+glimpse(panel_all_trips_mitms_income)
 
 # Check if there are any NAs before passing the panel to fepois():
-panel_a |> summarise(across(everything(), ~ sum(is.na(.x))))
+panel_all_trips_mitms_income |> summarise(across(everything(), ~ sum(is.na(.x))))
 
-
-# No NAs, we save the panel because fepois() needs a session with as much free
-# RAM as possible, so we open one loading just the panel and fixest library:
-saveRDS(panel_a, "../data/model_panel/panel_a.rds")
+# There are no NAs 
 ```
 
-On our machine, the `fepois()` below used about at 15.5GB of RAM and 25.5GB of swap, at least 41 GB are needed for it to run, we recommend allocating the necessary swap before running the rest of the script (the other models take slightly less space, still around 40GB).
+While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating some swap memory (they require around 41GB of RAM to run, we recommend making sure you have some more than that if that's your case). We save the .rds files because that allows personal computers to keep as much RAM as possible free for `fepois()` by restarting R session before each model's chunk, and just reading the RDS file and running `fepois()`.
 
-We **restart R** here, so that `fepois()` starts with as much spaces as possible. The next chunk only load the panel and the package that estimates it, then saves the result straight away into an .rds file:
+```{r}
+# To allow  fepois() to run in a session with as much free RAM as possible, 
+# we save the panel in an RDS file:
+saveRDS(panel_all_trips_mitms_income, "../data/model_panels/panel_all_trips_mitms_income.rds")
+```
 
 Originally we used the more basic syntax (with `fml = n_trips ~ utci_bins * activity_destination * income | date + id_destination`), but after working with the results for a while, we realized some things would be easier if we use the `i()` syntax instead, since it “allows for better synergies with other `fixest` functions like `etable` and `coefplot`/`iplot`” ([Bergé and McDermott, 2026, Section 4.2](https://cran.r-project.org/web/packages/fixest/vignettes/fixest_walkthrough.html#4_Interaction_terms)).
 
 ```{r}
-library(fixest)
+# If working on a personal computer, restart R before running this chunk.
 
-panel_a <- readRDS("../data/model_panel/panel_a.rds")
+library(fixest) # Needed for users that restart R before running.
 
-model_a <- fepois(
+panel_all_trips_mitms_income <- readRDS("../data/model_panels/panel_all_trips_mitms_income.rds")
+
+model_all_trips_mitms_income <- fepois(
   fml = n_trips ~ activity_destination * income +
     i(utci_bins, ref = "25-30"):activity_destination:income | date + id_destination,
-  data = panel_a,
+  data = panel_all_trips_mitms_income,
   cluster = ~province,
   # Clean intermediary objects as much as possible to free RAM space:
   mem.clean = TRUE,
-  # Use only one thread to avoid crashing:
-  nthreads = 1
+  nthreads = 48 # Set this value according to your computer
   )
 
-# And we save it straight away, to avoid losing hours of computation:
-saveRDS(model_a, "../data/model_panel/model_a.rds")
+# Create the directory to save the models there:
+dir.create("../data/models", showWarnings = FALSE, recursive = TRUE)
+
+# And save it:
+saveRDS(model_all_trips_mitms_income, "../data/models/model_all_trips_mitms_income.rds")
 ```
 
-We **restart R** again to free the swap memory and read the model to check everything worked:
+We read the model to check everything worked:
 
 ```{r}
-library(fixest)
+model_all_trips_mitms_income <- readRDS("../data/models/model_all_trips_mitms_income.rds")
 
-model_a <- readRDS("../data/model_panel/model_a.rds")
+etable(model_all_trips_mitms_income)
 ```
 
-```{r}
-etable(model_a)
-```
+## SEGUIR REVISANDO DESDE AQUÍ
 
-### Model B
+### Model B: home trips, MITMS income
 
-We use the same income variable as model A (MITMS income), but only the trips that start or end at home. This is the same sample of trips INE income can be assigned to, so that we can compare what the sample restriction alone does to the estimates, and cleanly compare to INE's income variable.
+We use the same income variable as model A (full sample, MITMS income), but only the trips that start or end at home. This is the same subsample of trips INE income can be assigned to, so that we can compare what the sample restriction alone does to the estimates, and cleanly compare to INE's income variable.
 
-We **restart R** and build the panel for model b, this one keeps MITMS's own income variable but only the trips with origin or destination home- The UTCI bins are the same as in model A:
+We build the panel for model B, this one keeps MITMS's own income variable but only the trips with origin or destination home. The UTCI bins are the same as in model A:
 
 ```{r}
-library(dplyr)
-library(tidyr)
+# Loading these libraries is needed for users that restart R before running.
+library(dplyr) 
+library(tidyr) 
 
-trips_panel <- readRDS("../data/model_panel/trips_panel.rds")
+trips_panel <- readRDS("../data/model_panels/trips_panel.rds")
 
-panel_b <- trips_panel |>
+panel_home_trips_mitms_income <- trips_panel |>
   # Keep only the trips with home in origin or destination:
   filter(home_trip) |>
+  # The trips ending abroad have no utci, and they are not part of our study:
+  filter(!is.na(utci)) |>
+  # Neither are the days outside our bins, below 25 °C or above 50 °C:
+  filter(utci >= 25, utci < 50) |>
   # Group by the original MITMS income:
   group_by(date, id_destination,
            province, # Needed for the cluster
@@ -134,68 +143,73 @@ panel_b <- trips_panel |>
       utci < 45 ~ "40-45",
       utci < 50 ~ "45-50")
   ) |>
-  # Drop what falls outside the bins: the days below 25 °C and the trips
-  # ending abroad (because they have no utci), these are not part of our study:
-  filter(!is.na(utci_bins)) |>
   select(!utci)
 
-glimpse(panel_b)
+glimpse(panel_home_trips_mitms_income)
 
 # Check if there are any NAs before passing the panel to fepois():
-panel_b |> summarise(across(everything(), ~ sum(is.na(.x))))
+panel_home_trips_mitms_income |> summarise(across(everything(), ~ sum(is.na(.x))))
 
-# No NAs, we save the panel because fepois() needs a session with as much free
-# RAM as possible, so we open one loading just the panel and fixest library:
-saveRDS(panel_b, "../data/model_panel/panel_b.rds")
+# There are no NAs
 ```
 
-We **restart R** here as well, so that `fepois()` starts with as much space as possible:
+As with model A, we save the panel as an .rds file, so that smaller computers can restart R before estimating:
 
 ```{r}
-library(fixest)
+# To allow  fepois() to run in a session with as much free RAM as possible,
+# we save the panel in an RDS file:
+saveRDS(panel_home_trips_mitms_income, "../data/model_panels/panel_home_trips_mitms_income.rds")
+```
 
-panel_b <- readRDS("../data/model_panel/panel_b.rds")
+```{r}
+# If working on a personal computer, restart R before running this chunk.
 
-model_b <- fepois(
+library(fixest) # Needed for users that restart R before running.
+
+panel_home_trips_mitms_income <- readRDS("../data/model_panels/panel_home_trips_mitms_income.rds")
+
+model_home_trips_mitms_income <- fepois(
   fml = n_trips ~ activity_destination * income +
     i(utci_bins, ref = "25-30"):activity_destination:income | date + id_destination,
-  data = panel_b,
+  data = panel_home_trips_mitms_income,
   cluster = ~province,
   # Clean intermediary objects as much as possible to free RAM space:
   mem.clean = TRUE,
-  # Use only one thread to avoid crashing:
-  nthreads = 1
+  nthreads = 48 # Set this value according to your computer
   )
 
-# And we save it straight away, to avoid losing hours of computation:
-saveRDS(model_b, "../data/model_panel/model_b.rds")
+# And save it:
+saveRDS(model_home_trips_mitms_income, "../data/models/model_home_trips_mitms_income.rds")
 ```
 
-We **restart R** again to free the swap memory and read the model to check everything worked:
+We read the model to check everything worked:
 
 ```{r}
-library(fixest)
+model_home_trips_mitms_income <- readRDS("../data/models/model_home_trips_mitms_income.rds")
 
-model_b <- readRDS("../data/model_panel/model_b.rds")
-
-etable(model_b)
+etable(model_home_trips_mitms_income)
 ```
 
-### Model C
+### Model C: home trips, INE income, MITMS cuts
 
-Same sample as model B, but the income is from the INE data of the year the trips were made (using the same brackets as MITMS)-
+Same sample as model B (home trips, MITMS income), but the income is from the INE data of the year the trips were made (using the same brackets as MITMS).
 
-We **restart R** and build the panel for model c, identical to the one for model b except for the income variable:
+We build the panel for model C, identical to the one for model B except for the income variable:
 
 ```{r}
+# Loading these libraries is needed for users that restart R before running.
 library(dplyr)
 library(tidyr)
 
-trips_panel <- readRDS("../data/model_panel/trips_panel.rds")
+trips_panel <- readRDS("../data/model_panels/trips_panel.rds")
 
-panel_c <- trips_panel |>
+panel_home_trips_ine_income <- trips_panel |>
   # Keep only the trips with home in origin or destination:
   filter(home_trip) |>
+  # The trips ending abroad have no utci, and they are not part of our study:
+  filter(!is.na(utci)) |>
+  # Neither are the days outside our bins, below 25 °C or above 50 °C:
+  filter(utci >= 25, utci < 50) |>
   # Group by the income reconstructed from the INE data:
   group_by(date, id_destination,
            province, # Needed for the cluster
@@ -210,23 +224,15 @@ panel_c <- trips_panel |>
       utci < 45 ~ "40-45",
       utci < 50 ~ "45-50")
   ) |>
-  # Drop what falls outside the bins: the days below 25 °C and the trips
-  # ending abroad (because they have no utci), these are not part of our study:
-  filter(!is.na(utci_bins)) |>
-  select(!utci) 
+  select(!utci)
 
-glimpse(panel_c)
+glimpse(panel_home_trips_ine_income)
 
 # Check if there are any NAs before passing the panel to fepois():
-panel_c |> summarise(across(everything(), ~ sum(is.na(.x))))
-
-# Check how many trips that is:
-
-# Check if there are any NAs before passing the panel to fepois():
-panel_c |> summarise(across(everything(), ~ sum(is.na(.x))))
+panel_home_trips_ine_income |> summarise(across(everything(), ~ sum(is.na(.x))))
 
 # Check how many trips those NAs are:
-panel_c |>
+panel_home_trips_ine_income |>
     mutate("missing_ine_income_bracket" = is.na(ine_income_bracket)) |>
     summarise("trips" = sum(n_trips), .by = "missing_ine_income_bracket") |>
     mutate("pct_trips" = trips / sum(trips) * 100)
@@ -236,60 +242,62 @@ We find NAs in `ine_income_bracket`, as expected, since there were some MITMS zo
 
 ```{r}
 # Drop the NAs:
-panel_c <- panel_c |> drop_na()
+panel_home_trips_ine_income <- panel_home_trips_ine_income |> drop_na()
 
-# We save the panel because fepois() needs a session with as much free RAM
-# as possible, so we open one loading just the panel and fixest library:
-saveRDS(panel_c, "../data/model_panel/panel_c.rds")
+# To allow  fepois() to run in a session with as much free RAM as possible,
+# we save the panel in an RDS file:
+saveRDS(panel_home_trips_ine_income, "../data/model_panels/panel_home_trips_ine_income.rds")
 ```
 
-We **restart R** here as well, so that `fepois()` starts with as much space as possible:
-
 ```{r}
-library(fixest)
+# If working on a personal computer, restart R before running this chunk.
 
-panel_c <- readRDS("../data/model_panel/panel_c.rds")
+library(fixest) # Needed for users that restart R before running.
 
-model_c <- fepois(
+panel_home_trips_ine_income <- readRDS("../data/model_panels/panel_home_trips_ine_income.rds")
+
+model_home_trips_ine_income <- fepois(
   fml = n_trips ~ activity_destination * ine_income_bracket +
     i(utci_bins, ref = "25-30"):activity_destination:ine_income_bracket | date + id_destination,
-  data = panel_c,
+  data = panel_home_trips_ine_income,
   cluster = ~province,
   # Clean intermediary objects as much as possible to free RAM space:
   mem.clean = TRUE,
-  # Use only one thread to avoid crashing:
-  nthreads = 1
+  nthreads = 48 # Set this value according to your computer
   )
 
-# And we save it straight away, to avoid losing hours of computation:
-saveRDS(model_c, "../data/model_panel/model_c.rds")
+# And save it:
+saveRDS(model_home_trips_ine_income, "../data/models/model_home_trips_ine_income.rds")
 ```
 
-We **restart R** again to free the swap memory and read the model to check everything worked:
+We read the model to check everything worked:
 
 ```{r}
-library(fixest)
+model_home_trips_ine_income <- readRDS("../data/models/model_home_trips_ine_income.rds")
 
-model_c <- readRDS("../data/model_panel/model_c.rds")
-
-etable(model_c)
+etable(model_home_trips_ine_income)
 ```
 
-### Model D
+### Model D: home trips, INE income, terciles
 
 Same sample and same INE income as model C, but cut into population-weighted terciles instead of MITMS's brackets (the cuts made sense with the income distribution of 2020, but not with the other years).
 
-We **restart R** and build the panel for model d, identical to the one for model c except for the income variable:
+We build the panel for model d, identical to the one for model c except for the income variable:
 
 ```{r}
+# Loading these libraries is needed for users that restart R before running.
 library(dplyr)
 library(tidyr)
 
-trips_panel <- readRDS("../data/model_panel/trips_panel.rds")
+trips_panel <- readRDS("../data/model_panels/trips_panel.rds")
 
-panel_d <- trips_panel |>
+panel_home_trips_ine_terciles <- trips_panel |>
   # Keep only the trips with home in origin or destination:
   filter(home_trip) |>
+  # The trips ending abroad have no utci, and they are not part of our study:
+  filter(!is.na(utci)) |>
+  # Neither are the days outside our bins, below 25 °C or above 50 °C:
+  filter(utci >= 25, utci < 50) |>
   # Group by the terciles of the INE income:
   group_by(date, id_destination,
            province, # Needed for the cluster
@@ -304,82 +312,75 @@ panel_d <- trips_panel |>
       utci < 45 ~ "40-45",
       utci < 50 ~ "45-50")
   ) |>
-  # Drop what falls outside the bins: the days below 25 °C and the trips
-  # ending abroad (because they have no utci), these are not part of our study:
-  filter(!is.na(utci_bins)) |>
   select(!utci)
 
-glimpse(panel_d)
+glimpse(panel_home_trips_ine_terciles)
 
 # Check if there are any NAs before passing the panel to fepois():
-panel_d |> summarise(across(everything(), ~ sum(is.na(.x))))
+panel_home_trips_ine_terciles |> summarise(across(everything(), ~ sum(is.na(.x))))
 
 # Check how many trips those NAs are:
-panel_d |>
+panel_home_trips_ine_terciles |>
     mutate("missing_ine_income_tercile" = is.na(ine_income_tercile)) |>
     summarise("trips" = sum(n_trips), .by = missing_ine_income_tercile) |>
     mutate("pct_trips" = trips / sum(trips) * 100)
 ```
 
-Same NAs as in `panel_c`, we just drop them and save the .rds file.
+Same NAs as in `panel_home_trips_ine_income`, we just drop them and save the .rds file.
 
 ```{r}
-panel_d <- panel_d |> drop_na()
+panel_home_trips_ine_terciles <- panel_home_trips_ine_terciles |> drop_na()
 
-# We save the panel because fepois() needs a session with as much free RAM
-# as possible, so we open one loading just the panel and fixest library:
-saveRDS(panel_d, "../data/model_panel/panel_d.rds")
+# To allow  fepois() to run in a session with as much free RAM as possible,
+# we save the panel in an RDS file:
+saveRDS(panel_home_trips_ine_terciles, "../data/model_panels/panel_home_trips_ine_terciles.rds")
 ```
 
-We **restart R** again so that `fepois()` starts with as much space as possible:
-
 ```{r}
-library(fixest)
+# If working on a personal computer, restart R before running this chunk.
 
-panel_d <- readRDS("../data/model_panel/panel_d.rds")
+library(fixest) # Needed for users that restart R before running.
 
-model_d <- fepois(
+panel_home_trips_ine_terciles <- readRDS("../data/model_panels/panel_home_trips_ine_terciles.rds")
+
+model_home_trips_ine_terciles <- fepois(
   fml = n_trips ~ activity_destination * ine_income_tercile +
     i(utci_bins, ref = "25-30"):activity_destination:ine_income_tercile | date + id_destination,
-  data = panel_d,
+  data = panel_home_trips_ine_terciles,
   cluster = ~province,
   # Clean intermediary objects as much as possible to free RAM space:
   mem.clean = TRUE,
-  # Use only one thread to avoid crashing:
-  nthreads = 1
+  nthreads = 48 # Set this value according to your computer
   )
 
-# And we save it straight away, to avoid losing hours of computation:
-saveRDS(model_d, "../data/model_panel/model_d.rds")
+# And save it:
+saveRDS(model_home_trips_ine_terciles, "../data/models/model_home_trips_ine_terciles.rds")
 ```
 
-We **restart R** to free the swap memory and read the model back into a clean one to check everything worked:
+We read the model back to check everything worked:
 
 ```{r}
-library(fixest)
+model_home_trips_ine_terciles <- readRDS("../data/models/model_home_trips_ine_terciles.rds")
 
-model_d <- readRDS("../data/model_panel/model_d.rds")
-
-etable(model_d)
+etable(model_home_trips_ine_terciles)
 ```
 
 ### Export models A, B, C, D to LaTeX
 
-We load the four models results and export to LaTeX format using `etable()`, provided by `fixest` for this purpose. We are following [Berge's (2026) vignette on exporting estimation tables](https://cran.r-project.org/web/packages/fixest/vignettes/exporting_tables.html). The swap memory was still needed for this in our computer (around 31.5 total GB needed to load the model results). 
-
+We load the four models results and export to LaTeX format using `etable()`, provided by `fixest` for this purpose. We are following [Berge's (2026) vignette on exporting estimation tables](https://cran.r-project.org/web/packages/fixest/vignettes/exporting_tables.html).
 ```{r}
 library(fixest)
 
-model_a <- readRDS("../data/model_panel/model_a.rds")
-model_b <- readRDS("../data/model_panel/model_b.rds")
-model_c <- readRDS("../data/model_panel/model_c.rds")
-model_d <- readRDS("../data/model_panel/model_d.rds")
+model_all_trips_mitms_income <- readRDS("../data/models/model_all_trips_mitms_income.rds")
+model_home_trips_mitms_income <- readRDS("../data/models/model_home_trips_mitms_income.rds")
+model_home_trips_ine_income <- readRDS("../data/models/model_home_trips_ine_income.rds")
+model_home_trips_ine_terciles <- readRDS("../data/models/model_home_trips_ine_terciles.rds")
 ```
 
 ```{r}
 # We set a dictionary renaming the variables used by etable(). We read the
-# of thecoefficientes with names(coef(model_a)) to check what they were, then
-# renamed them in the dictionary:
+# coefficients with names(coef(model_all_trips_mitms_income)) to check
+# what they were, then renamed them in the dictionary:
 setFixest_dict(c(
   "n_trips" = "Trips",
   "utci_bins::30-35" = "UTCI 30-35",
@@ -405,12 +406,16 @@ setFixest_dict(c(
 ```
 
 ```{r}
+# Create the directory to save the tables there:
+dir.create("../report/tables", showWarnings = FALSE, recursive = TRUE)
+
 # Create the etable() for the table with the reference UTCI (25-30):
-etable(model_a, model_b, model_c, model_d,
+etable(model_all_trips_mitms_income, model_home_trips_mitms_income, model_home_trips_ine_income, model_home_trips_ine_terciles,
        # Everything whose name mentions another bin goes to the tables below:
        drop = "30-35|35-40|40-45|45-50",
        # Name the columns after the models:
-       headers = c("A", "B", "C", "D"),
+       headers = c("All trips, MITMS income", "Home trips, MITMS income",
+                   "Home trips, INE income", "Home trips, INE terciles"),
        title = "Activity and income at the reference UTCI (25-30 °C)",
        # The LaTeX label, we will use this to reference the table:
        label = "table_models_abcd_reference",
@@ -424,16 +429,19 @@ etable(model_a, model_b, model_c, model_d,
        replace = TRUE)
 
 # And then one table per temperature bin, which is what Renninger and Cabrera
-# report in their table S4. Model D has its own tables becuase the income
+# report in their table S4. Model D has its own tables because the income
 # terciles are different categories, so they take extra rows and don't let
 # the tables fit in just one page if put together with models a, b and c:
 for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
 
   # Create the table for each utci bin for models a, b and c:
-  etable(model_a, model_b, model_c,
+  etable(model_all_trips_mitms_income,
+         model_home_trips_mitms_income,
+         model_home_trips_ine_income,
          # Keep only the coefficients of this bin:
          keep = utci_bin,
-         headers = c("A", "B", "C"),
+         headers = c("All trips, MITMS income", "Home trips, MITMS income",
+                     "Home trips, INE income"),
          title = paste0("Change in trips at UTCI ",
                         utci_bin,
                         " °C, against the 25-30 °C reference"),
@@ -444,15 +452,16 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
          replace = TRUE)
   
   # Create the table for each utci bin for model d:
-  etable(model_d,
+  etable(model_home_trips_ine_terciles,
          keep = utci_bin,
-         headers = "D",
+         headers = "Home trips, INE terciles",
          title = paste0("Change in trips at UTCI ", utci_bin,
                         " °C by income tercile, against the 25-30 °C reference"),
-         label = paste0("table_model_d_", utci_bin),
+         label = paste0("table_model_home_trips_ine_terciles_", utci_bin),
          fontsize = "small",
          tex = TRUE,
-         file = paste0("../report/tables/table_model_d_", utci_bin, ".tex"),
+         file = paste0("../report/tables/table_model_home_trips_ine_terciles_",
+                       utci_bin, ".tex"),
          replace = TRUE)
 }
 ```
@@ -468,19 +477,17 @@ library(duckdb)
 
 model_panel_con <- dbConnect(
   duckdb(),
-  dbdir = "../data/model_panel/model_panel.duckdb",
+  dbdir = "../data/model_panels/model_panel.duckdb",
   read_only = TRUE
   )
 
-dbExecute(model_panel_con, "SET memory_limit = '8GB'")
-dbExecute(model_panel_con, "SET threads = 6")
+dbExecute(model_panel_con, "SET memory_limit = '200GB'")
+dbExecute(model_panel_con, "SET threads = 48")
 
 trips_panel_demographic <- tbl(model_panel_con, "trips_panel_demographic")
 ```
 
-
 Since compared to the previous models we are adding two variables with 3 categories (`sex`) and 5 categories (`age`), the resulting dataset is so big that `fepois()` crashes when we try to give it the full dataset all at once (see the failed attempt in the following two chunks):
-
 
 ```{r}
 panel_rq3 <- trips_panel_demographic |>
@@ -508,7 +515,7 @@ panel_rq3 <- trips_panel_demographic |>
 
 glimpse(panel_rq3)
 
-saveRDS(panel_rq3, "../data/model_panel/panel_rq3.rds")
+saveRDS(panel_rq3, "../data/model_panels/panel_rq3.rds")
 
 dbDisconnect(model_panel_con, shutdown = TRUE)
 ```
@@ -518,7 +525,7 @@ We **restart R** again, so that `fepois()` starts with as much space as possible
 ```{r}
 library(fixest)
 
-panel_rq3 <- readRDS("../data/model_panel/panel_rq3.rds")
+panel_rq3 <- readRDS("../data/model_panels/panel_rq3.rds")
 
 model_rq3 <- fepois(
   fml = n_trips ~ activity_destination * ine_income_tercile * age * sex +
@@ -528,19 +535,16 @@ model_rq3 <- fepois(
   cluster = ~province,
   # Clean intermediary objects as much as possible to free RAM space:
   mem.clean = TRUE,
-  # Use only one thread to avoid crashing:
-  nthreads = 1
+  nthreads = 48 # Set this value according to your computer
   )
 
 # And we save it straight away, to avoid losing hours of computation:
-saveRDS(model_rq3, "../data/model_panel/model_rq3.rds")
+saveRDS(model_rq3, "../data/models/model_rq3.rds")
 ```
 
 We get the following error:
 
->Error: in fepois(fml = n_trips ~ activity_destination * ine...: 
-Evaluation of the right-hand-side of the formula raises an error:
-cannot allocate vector of size 240.6 Gb
+> Error: in fepois(fml = n_trips \~ activity_destination \* ine...: Evaluation of the right-hand-side of the formula raises an error: cannot allocate vector of size 240.6 Gb
 
 For this reason, we break the model down into pieces: one model per combination of destination activity and age group, sixteen in total, each of them allows us to look at the intersection of `bins × income tercile × sex`. This means we cannot make claims about the contrast between activities or between age groups, but it allows us to make claims about the difference between sex and income crosses inside an age group and activity.
 
@@ -549,7 +553,7 @@ library(dplyr)
 library(tidyr)
 library(fixest)
 
-panel_rq3 <- readRDS("../data/model_panel/panel_rq3.rds")
+panel_rq3 <- readRDS("../data/model_panels/panel_rq3.rds")
 
 # Check if there are any NAs before passing the panel to fepois():
 panel_rq3 |> summarise(across(everything(), ~ sum(is.na(.x))))
@@ -576,7 +580,8 @@ panel_rq3 |>
          "pct_trips" = trips / sum(trips) * 100)
 
 ```
-Three columns include NAs: `ine_income_tercile`, `age`,  and `sex`. The missing trips on `ine_income_tercile` are just 0.033%, but in `age` and `sex` we are losing a significant amount of trips: 24.89% for `age` and 37.45% for `sex`. But this does not mean we are losing the sum of these trips, since there could be NAs in the same row.
+
+Three columns include NAs: `ine_income_tercile`, `age`, and `sex`. The missing trips on `ine_income_tercile` are just 0.033%, but in `age` and `sex` we are losing a significant amount of trips: 24.89% for `age` and 37.45% for `sex`. But this does not mean we are losing the sum of these trips, since there could be NAs in the same row.
 
 ```{r}
 # Check how many trips are missing any variable:
@@ -601,7 +606,6 @@ panel_rq3 |>
          .by = ine_income_tercile) |>
   arrange(ine_income_tercile, missing_any)
 ```
-
 
 The loss is not even: we lose 46.56% of the trips of the low tercile and only 28.81% of those of the high one, something to keep in mind when reading the differences between terciles.
 
@@ -646,12 +650,12 @@ for (i in seq_len(nrow(rq3_models_activity_age))) {
     # Clean intermediary objects as much as possible to free RAM space:
     mem.clean = TRUE,
     # Use only one thread to avoid crashing:
-    nthreads = 1
+    nthreads = 48
     )
 
   # We save each model as soon as it is done:
   saveRDS(model_rq3,
-          paste0("../data/model_panel/model_rq3_",
+          paste0("../data/models/model_rq3_",
                  activity_i, "_",
                  age_i, ".rds"))
   
@@ -690,13 +694,13 @@ for (one_age in c("0-25", "25-45", "45-65", "65-100")) {
   # We read the .rds files with the four activities of the corresponding
   # age group, that is, the four models that will share the same table:
   model_work <- readRDS(paste0(
-    "../data/model_panel/model_rq3_work_or_study_", one_age, ".rds"))
+    "../data/models/model_rq3_work_or_study_", one_age, ".rds"))
   model_infrequent <- readRDS(paste0(
-    "../data/model_panel/model_rq3_infrequent_activity_", one_age, ".rds"))
+    "../data/models/model_rq3_infrequent_activity_", one_age, ".rds"))
   model_frequent <- readRDS(paste0(
-    "../data/model_panel/model_rq3_frequent_activity_", one_age, ".rds"))
+    "../data/models/model_rq3_frequent_activity_", one_age, ".rds"))
   model_home <- readRDS(paste0(
-    "../data/model_panel/model_rq3_home_", one_age, ".rds"))
+    "../data/models/model_rq3_home_", one_age, ".rds"))
 
   # And create the table as we did above:
   etable(model_work, model_infrequent, model_frequent, model_home,
