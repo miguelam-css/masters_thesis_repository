@@ -7,12 +7,14 @@ editor: visual
 
 In this document we build the panels the models need. We begin by taking the daily trips dataset we built in script 02, and attaching two values to each row: the UTCI of the district where the trip ends and the INE income of the district where the traveller lives. We then sum the trips, grouping by (that is, keeping only) the variables the models use (date, destination district, destination activity, UTCI, income, age and sex). This results in an intermediary table with one row per district, day and combination of those variables. That table is too big for most personal computers to hold in session memory, so we write it in a DuckDB database for reproducibility. We then save two smaller tables into .rds files: one without age and sex, used for the four models that reproduce Renninger and Cabrera (2026) and answer RQ1; and one that keeps age and sex, for the models that answer RQ2.
 
+We don't include the trips whose activity at destination is "home" in any of the models. Renninger and Cabrera (2026) never say whether they include them or not, we interpret that as an exclusion because of three reasons: first, because "home" does not appear anywhere in their results: it doesn't appear in Table S1 of the supplementary material, which reports the descriptive statistics for the other three activities, doesn't appear in Table S2 (*Impact of Extreme Heat (UTCI \> 40 °C) on Mobility by Activity Type*), and neither in Tables S3, S4 and S5, which cross activity with age, income, and gender, respectively. Second, because in table S1 from the supplementary material, the percentages of share of trips add up to 100% without including the "home" trips, and that set of trips is described in the footnote as "trip shares are computed as the fraction of all trips in the country", which suggest trips with destination home were excluded. Third, and this also a substantive argument to support our decision to not include home trips in the intersectionality models either: trips ending at home are different in nature from the rest, since the trips with destination home are trips that departed from home in the first place, and most trips will always end at home in a daily panel.
 
 ```{r}
 #| message: false
 #| warning: false
 
 library(dplyr)
+library(forcats)
 library(stringr)
 library(lubridate)
 library(DBI)
@@ -39,8 +41,13 @@ mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
 
 # Following Renninger and Cabrera (2026) we exclude the Canary Islands from
 # our analysis, so we drop them:
-mitma_daily <- mitma_daily |> 
+mitma_daily <- mitma_daily |>
   filter(!str_starts(id_destination, "35|38"))
+
+# And, as explained above, we drop the trips whose activity at destination
+# is "home":
+mitma_daily <- mitma_daily |>
+  filter(activity_destination != "home")
 ```
 
 ## Load UTCI and income tables
@@ -173,7 +180,10 @@ panel_reproduction <- trips_panel_demographic |>
     home_trip) |>
   # And sum the trips:
   summarise("n_trips" = sum(n_trips), .groups = "drop") |>
-  collect()
+  collect() |>
+  # The activity variable is returned by the DuckDB as a factor that still
+  # has an empty category for the "home" trips we filtered out, we drop it:
+  mutate("activity_destination" = fct_drop(activity_destination))
 
 glimpse(panel_reproduction)
 ```
@@ -188,14 +198,13 @@ saveRDS(panel_reproduction, "../data/model_panels/panel_reproduction.rds")
 rm(panel_reproduction)
 ```
 
-## The intersectionality panel (models E, F, G and H)
+## The intersectionality panel (models E, F, and G)
 
 Save the panel for the intersectionality models:
 
 ```{r}
 panel_intersectionality <- trips_panel_demographic |>
-  # Keep only trips with origin or destination home, and UTCI between
-  # 25 and 50:
+  # Keep only trips we can assign income to (home trips):
   filter(home_trip == TRUE,
          utci >= 25,
          utci < 50) |>
@@ -206,6 +215,9 @@ panel_intersectionality <- trips_panel_demographic |>
            age, sex) |>
   summarise("n_trips" = sum(n_trips), .groups = "drop") |>
   collect() |>
+  # The activity variable is returned by the DuckDB as a factor that still
+  # has an empty category for the "home" trips we filtered out, we drop it:
+  mutate("activity_destination" = fct_drop(activity_destination)) |>
   # Create the utci bins:
   mutate(
     "utci_bins" = case_when(
