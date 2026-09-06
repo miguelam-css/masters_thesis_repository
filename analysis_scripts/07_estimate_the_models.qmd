@@ -512,7 +512,7 @@ panel_intersectionality |>
          "pct_trips" = trips / sum(trips) * 100)
 ```
 
-Three columns include NAs: `ine_income_tercile`, `age`, and `sex`. The missing trips on `ine_income_tercile` are just 0.03%, but in `age` and `sex` we are losing a significant amount of trips: 25.19% for `age` and 37.87% for `sex`. But this does not mean we are losing the sum of these trips, since there could be NAs in the same row.
+Three columns include NAs: `ine_income_tercile`, `age`, and `sex`. The missing trips on `ine_income_tercile` are just 0.03% (0.26% of rows), but in `age` and `sex` we are losing a significant amount of trips: 25.19% for `age` and 37.87% for `sex` (10.48% and 40.37% of the rows, respectively). But this does not mean we are losing the sum of these trips, since there could be NAs in the same row.
 
 ```{r}
 # Check how many trips are missing any variable:
@@ -523,7 +523,7 @@ panel_intersectionality |>
          "pct_trips" = trips / sum(trips) * 100)
 ```
 
-A 37.89% of the trips are missing at least one of these variables, but we still have data on over 6.4 billion trips. We check whether these trips concentrate in an income tercile:
+A 37.89% of the trips are missing at least one of these variables (40.50% of the rows), but we still have data on over 6.4 billion trips (over 35 million rows). We check whether these trips concentrate in an income tercile:
 
 ```{r}
 # The same count, this time within each income tercile, so that the percentages
@@ -538,7 +538,7 @@ panel_intersectionality |>
   arrange(ine_income_tercile, missing_any)
 ```
 
-The loss is not even: we lose 47.35% of the trips of the low tercile and only 29.02% of those of the high one (37.13% of the trips in the middle one), something to keep in mind when reading the differences between terciles.
+The loss is not even in terms of trips: we lose 47.35% of the trips of the low tercile (44.95% of the rows), 37.13% of the trips in the middle tercile (39.76% of the rows), and only 29.02% of the trips (36.28% of rows) in the high one.
 
 And drop the missing trips:
 
