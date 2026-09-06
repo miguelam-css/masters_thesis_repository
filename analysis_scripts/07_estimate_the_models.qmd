@@ -13,7 +13,6 @@ The first four models share the same specification, and differ only in the incom
 
 The second set of models share the same specification between them (similar to the models above, they use INE income terciles and let that income variable interact with gender and age), and differ only in the activity of the trips: work or study (model E), frequent (model F), and infrequent trips (model G). We had to take this decision to run three separated models because we lacked the computational capacity for `fepois()` to be able to run all interactions including activity type, and comparisons between activity types are the least critical for our RQ.
 
-
 Regarding the computational requirements to run the models: the reproduction models (A, B, C, and D) need nearly 25GB of free RAM if run one by one (that is, restarting the R Session to free up as much memory as needed right before running the chunk with the `fepois()`), we recommend making sure you have at least 25GB of free RAM before running each model. The intersectionality models (E, F, and G) require nearly 85GB of RAM, we thus recommend making sure you have at least that amount of free space before running each of the chunks containing a `fepois()`.
 
 ## Library set up
@@ -414,30 +413,7 @@ setFixest_dict(c(
 # Create the directory to save the tables there:
 dir.create("../report/tables", showWarnings = FALSE, recursive = TRUE)
 
-# Create the etable() for the table with the reference UTCI (25-30):
-etable(model_a, model_b, model_c, model_d,
-       # Everything whose name mentions another bin goes to the tables below:
-       drop = "30-35|35-40|40-45|45-50",
-       # Name the columns after the models:
-       headers = c("Full sample, MITMS income", "Subsample, MITMS income",
-                   "Subsample, INE income", "Subsample, INE terciles"),
-       title = "Activity and income at the reference UTCI (25-30 °C)",
-       # The LaTeX label, we will use this to reference the table:
-       label = "table_models_abcd_reference",
-       # This one has all the level terms of the four models, so it needs a
-       # smaller font than the tables below to fit in one page:
-       fontsize = "scriptsize",
-       # The model names make the table wider than the text block, we use 
-       # adjustbox to allow LaTeX to adjust the tables, the package
-       # `adjustbox` must be loaded in LaTeX:
-       adjustbox = TRUE,
-       # To make the etable in LaTeX format:
-       tex = TRUE,
-       file = "../report/tables/table_models_abcd_reference.tex",
-       # Overwrite the file instead of appending to it:
-       replace = TRUE)
-
-# And then one table per temperature bin. Model D has its own tables because
+# We create one table per temperature bin. Model D has its own tables because
 # the income terciles are different categories, so they take extra rows and
 # don't let the tables fit in just one page if we put them together with
 # models a, b, and c:
@@ -449,23 +425,37 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
          model_c,
          # Keep only the coefficients of this bin:
          keep = utci_bin,
+         # Name the columns with the model names:
          headers = c("Full sample, MITMS income", "Subsample, MITMS income",
                      "Subsample, INE income"),
+         # Print only the statistics we want. By default etable() also prints
+         # the BIC, which we don't need. On top of that, models B, C and F
+         # printed a BIC below 1 while the others had BICS of billions, computing
+         # it with BIC() gave numbers in the same orders of magnitude for all
+         # of them, so it must be a problem with `fixest`:
+         fitstat = ~ n + sq.cor + pr2,
          title = paste0("Change in trips at UTCI ",
                         utci_bin,
                         " °C, against the 25-30 °C reference"),
+         # The LaTeX label, we will use this to reference the table:
          label = paste0("table_models_abc_", utci_bin),
          fontsize = "small",
-         # Same as above, the headers make it too wide for the page:
+         # The model names make the table wider than the text block, we use
+         # adjustbox to allow LaTeX to adjust the tables, the package
+         # `adjustbox` must be loaded in LaTeX:
          adjustbox = TRUE,
+         # To make the etable in LaTeX format:
          tex = TRUE,
          file = paste0("../report/tables/table_models_abc_", utci_bin, ".tex"),
+         # Overwrite the file instead of appending to it:
          replace = TRUE)
 
   # Create the table for each utci bin for model D:
   etable(model_d,
          keep = utci_bin,
          headers = "Subsample, INE terciles",
+         # Same as above, we print only the statistics we want (no BIC):
+         fitstat = ~ n + sq.cor + pr2,
          title = paste0("Change in trips at UTCI ", utci_bin,
                         " °C by income tercile, against the 25-30 °C reference"),
          label = paste0("table_model_d_", utci_bin),
@@ -806,6 +796,8 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
          headers = c("Work/study", "Frequent activity", "Infrequent activity"),
          # Keep only the coefficients of this bin:
          keep = utci_bin,
+         # Same as above, we print only the statistics we want (no BIC):
+         fitstat = ~ n + sq.cor + pr2,
          title = paste0("Change in trips by income tercile, age and sex at UTCI ",
                         utci_bin, " °C, against the 25-30 °C reference"),
          label = paste0("table_intersectionality_", utci_bin),
