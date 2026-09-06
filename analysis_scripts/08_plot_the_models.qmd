@@ -1,0 +1,516 @@
+---
+title: "Plotting the results"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+## Overview
+
+The models are estimated and saved in `07_estimate_the_models.qmd`. Here we only read them, pull their coefficients into a small tibble, and generate and save the plots. For easier reproducibility in smaller personal computers, we never load more than one model in memory at a time (they weight between 2.6GB and 12.5 GB).
+
+## Set up
+
+```{r}
+#| message: false
+#| warning: false
+
+library(fixest)
+library(broom)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(tibble)
+library(ggplot2)
+library(RColorBrewer)
+
+
+# We defined a custom theme for all the figures in the masters thesis:
+source("../dataviz_theme/theme_tfm.R")
+```
+
+## Labels and colors
+
+We prepare readable labels and model names, so that the plots do not show the raw names:
+
+```{r}
+# More easily readable model names:
+model_labels <- c("model_a" = "A: full sample",
+                  "model_b" = "B: subsample",
+                  "model_c" = "C: INE income",
+                  "model_d" = "D: INE terciles")
+
+# Activity labels:
+activity_labels <- c("work_or_study" = "Work/study",
+                     "frequent_activity" = "Frequent",
+                     "infrequent_activity" = "Infrequent")
+
+
+# Age labels:
+age_labels <- c("0-25" = "Age 0-25",
+                "25-45" = "Age 25-45",
+                "45-65" = "Age 45-65",
+                "65-100" = "Age 65-100")
+```
+
+And some of the colors from `RColorBrewer` which we use manually in some of the plots (see why we chose these colors in `../dataviz_theme/dataviz_decisions.qmd`):
+
+```{r}
+# Print the names:
+brewer.pal(4, "YlGnBu")
+
+# And save them (we do this this way so that the colors are shown in
+# the code):
+income_colours <- c("Low" = "#A1DAB4",
+                    "Middle" = "#41B6C4",
+                    "High" = "#225EA8")
+```
+
+## Reproduction models plots
+
+### Load data
+
+We read the coefficients with `tidy()`, which returns them in a tibble, with their names in a column and their confidence intervals already computed from the clustered standard errors of the model. We generate a tibble with all the coefficients for models A to D using a for loop that appends the rows of each model one, removing the previous model before laoding the next one to avoid overloading the session memory in smaller personal computers:
+
+```{r}
+# A vector with all the models we read:
+models_abcd <- c("model_a", "model_b", "model_c", "model_d")
+
+# Create the emty tibble with the coefficients:
+coefficients_abcd_raw <- tibble()
+
+# For every model:
+for (one_model in models_abcd) {
+  
+  # Load the .rds file:
+  model <- readRDS(paste0("../data/models/", one_model, ".rds"))
+
+  # Extract the coefficients with their confidence intervals:
+  coefficients_abcd_raw <- tidy(model, conf.int = TRUE) |>
+    # Keep only the coefficients with UTCI interactions:
+    filter(str_detect(term, "utci_bins::")) |>
+    # Create a column indicating what model the coefficients come from:
+    mutate("model" = one_model) |>
+    # And add the rows to the already existing tibble:
+    bind_rows(coefficients_abcd_raw)
+
+  # Free the memory before reading the next model:
+  rm(model)
+}
+
+glimpse(coefficients_abcd_raw)
+```
+
+As we can see, the terms have three parts: activity destination, income, and UTCI bin, we split them so that each of them has their own column, and clean their values so that they look better in the plots:
+
+```{r}
+coefficients_abcd <- coefficients_abcd_raw |>
+  # The three parts are joined by ":" so we separate them:
+  separate_wider_delim(
+    term, delim = ":",
+    # We include two NAs for the "utci_bins" text and the column that results
+    # of splitting  the "::", this way those columns are not created:
+    names = c("activity_destination", "income", NA, NA, "utci_bins")) |>
+  # The values still have the name of the original variable in front of
+  # them, we remove those:
+  mutate(
+    "activity_destination" = str_remove(activity_destination,
+                                        "activity_destination"),
+    # The income variable has a different name in each model:
+    "income" = str_remove(income,
+                          "^ine_income_tercile|^ine_income_bracket|^income"),
+    # Brackets (A-C) and terciles (D) are different variables, but they order
+    # the zones the same way, so we give them a common scale:
+    "income_level" = case_when(
+      income %in% c("<10", "low") ~ "Low",
+      income %in% c("10-15", "middle") ~ "Middle",
+      income %in% c(">15", "high") ~ "High") |>
+      factor(levels = c("Low", "Middle", "High")))
+
+glimpse(coefficients_abcd)
+```
+
+Since the models are Poisson, the estimates are changes in the log count, to make them easier to interpret, we exponentiate them to convert them into incidence rate ratios. Each of them is a ratio against the reference bin (25-30 °C) within the same activity and income level:
+
+```{r}
+coefficients_abcd <- coefficients_abcd |>
+  mutate("irr" = exp(estimate),
+         "irr_low" = exp(conf.low),
+         "irr_high" = exp(conf.high))
+
+glimpse(coefficients_abcd)
+```
+
+### Plot 1
+
+```{r}
+data_plot_1 <- coefficients_abcd |>
+  # We want to visually distinguish coeffients that are statistically
+  # distinguishable from no effect (the confidence interval doesn't include
+  # and IRR of 1) by giving more weight to their points. In order to know what
+  # points to fill and which to leave blank  we create a binary variable with
+  # that information:
+  mutate("distinguishable" = if_else(irr_low > 1 | irr_high < 1,
+                                     "Yes",
+                                     "No"))
+```
+
+```{r}
+#| fig-width: 5.9
+#| fig-height: 5.5
+
+# Create the plot:
+plot_1 <- ggplot(data_plot_1, 
+                 aes(y = utci_bins, x = irr,
+                     colour = income_level,
+                     # Group by income only, otherwise the points are also
+                     # grouped by shape and they no longer sit on top of
+                     # their own interval line:
+                     group = income_level)) +
+  
+  # A dashed line for IRR value of 1:
+  geom_vline(xintercept = 1, linetype = "dashed", colour = "grey50") +
+  
+  # Add the lines for the confidence interval ranges:
+  geom_linerange(aes(xmin = irr_low, xmax = irr_high),
+                 linewidth = 0.3,
+                 position = position_dodge(width = 0.5)) +
+  # Add the points in the point estimates, all of them filled:
+  geom_point(aes(fill = income_level),
+             shape = 21, size = 1.6, stroke = 0.5,
+             position = position_dodge(width = 0.5)) +
+  # And add another point on top, this time filled in white. We will make
+  # the size = 0 when their CI crosses IRR of 1, so that we see the filled
+  # point or a "hollow" (white) point depending on the case:
+  geom_point(aes(size = distinguishable),
+             shape = 21, fill = "white", stroke = 0.5,
+             position = position_dodge(width = 0.5)) +
+
+  # Create the grid with one model per row and an activity per column:
+  facet_grid(model ~ activity_destination,
+             labeller = labeller(activity_destination = activity_labels,
+                                 model = model_labels),
+             # Place the name of the models to the left:
+             switch = "y") +
+  # And place the utci bins to the right:
+  scale_y_discrete(position = "right") +
+  
+  # Set the color of the interval lines and the points contours:
+  scale_colour_manual(values = income_colours) +
+  # Set the fill of the points:
+  scale_fill_manual(values = income_colours) +
+  # The points we can distinguish are the ones the white layer draws with no
+  # size at all:
+  scale_size_manual(values = c("Yes" = 0, "No" = 1.6)) +
+
+  # Edit the legend so that we get just one legend that reflects both the
+  # fill and the color:
+  guides(fill = "none", size = "none",
+         colour = guide_legend(override.aes = list(shape = 21,
+                                                   fill = income_colours))) +
+
+  # Define the labels. The hollow points have no legend of their own, so the
+  # caption is the one that explains them:
+  labs(y = "UTCI bin (°C)",
+       x = "Change in trips relative to the 25-30 °C bin (IRR)",
+       colour = "Income:",
+       caption = "Hollow point: confidence interval crosses IRR = 1") +
+  
+  # Our custom theme:
+  theme_tfm +
+  # And some tweaks:
+  theme(
+    # Remove the horizontal grid lines:
+    panel.grid.major.y = element_blank(),
+    # Put the strip outside of the facets:
+    strip.placement = "outside",
+    # Place the legend at the bottom:
+    legend.position = "bottom",
+    # And the caption right under it, centred instead of to the right:
+    plot.caption = element_text(hjust = 0.5, margin = margin(t = -4)))
+
+plot_1
+
+# Save it:
+ggsave("../report/figures/rq1_irr_by_income_pointrange.pdf", plot_1,
+       device = cairo_pdf,
+       width = 5.9, height = 5.5,
+       create.dir = TRUE)
+```
+
+### Plot 2
+
+```{r}
+data_plot_2 <- coefficients_abcd |>
+  select(model, activity_destination, utci_bins, income_level, irr) |>
+  # We convert the income levels into columns to be able to be able
+  # to compute the subtraction:
+  pivot_wider(names_from = income_level, values_from = irr) |>
+  # And compute the gap between low and high income.
+  mutate("gap" = Low - High)
+
+glimpse(data_plot_2)
+```
+
+```{r}
+#| fig-width: 5.9
+#| fig-height: 3
+# Create the plot:
+plot_2 <- ggplot(data_plot_2,
+                 aes(y = utci_bins, x = gap, colour = model)) +
+  
+  # Lollipop stick:
+  geom_linerange(aes(xmin = 0, xmax = gap),
+                 linewidth = 0.3,
+                 # Position reversed, so that model A is the top one:
+                 position = position_dodge(width = 0.6,
+                                           reverse = TRUE)) +
+  # Lollipop head:
+  geom_point(size = 0.8,
+             position = position_dodge(width = 0.6, reverse = TRUE)) +
+  
+  
+  # One facet per activity:
+  facet_wrap(~ activity_destination,
+             labeller = labeller(activity_destination = activity_labels)) +
+  
+  # Set the colour of the models::
+  scale_colour_brewer(palette = "Dark2",
+                      labels = model_labels) +
+  labs(y = "UTCI bin (°C)",
+       x = "Distance between the highest and the lowest income level (IRR)",
+       colour = "Model:") +
+  
+  # Add the custom theme:
+  theme_tfm +
+  # And some tweaks:
+  theme(
+    # Remove the horizontal grid lines:
+    panel.grid.major.y = element_blank(),
+    legend.position = "bottom")
+
+plot_2
+
+# Save it:
+ggsave("../report/figures/rq1_income_gap_lollipop.pdf", plot_2,
+       device = cairo_pdf,
+       width = 5.9, height = 3)
+```
+
+## Intersectionality models plots
+
+### Load data
+
+```{r}
+# At the left we write of the corresponding .rds file, to the right the
+# activity in that model, so that the loop below writes that in the 
+# "activity_destination" column:
+models_efg <- c("work_or_study" = "model_e",
+                "frequent_activity" = "model_f",
+                "infrequent_activity" = "model_g")
+
+# Create the empty tibble with the coefficients:
+coefficients_efg_raw <- tibble()
+
+# For every activity model:
+for (one_activity in names(models_efg)) {
+
+  # Load the .rds file:
+  model <- readRDS(paste0("../data/models/", models_efg[one_activity], ".rds"))
+
+  # Extract the coefficients with their confidence intervals:
+  coefficients_efg_raw <- tidy(model, conf.int = TRUE) |>
+    # Keep only the coefficients with UTCI interactions:
+    filter(str_detect(term, "utci_bins::")) |>
+    # Create the column indicating what model the coefficients come from:
+    mutate("activity_destination" = one_activity) |>
+    # And add the rows to the already existing tibble:
+    bind_rows(coefficients_efg_raw)
+
+  # Free the memory before reading the next model:
+  rm(model)
+}
+
+glimpse(coefficients_efg_raw)
+```
+
+The terms of these models have four parts: income tercile, age group, sex, and UTCI bin. We split them and clean their values the same way we did for models A to D:
+
+```{r}
+coefficients_efg <- coefficients_efg_raw |>
+  # The four parts are joined by ":" so we separate them:
+  separate_wider_delim(
+    term, delim = ":",
+    # We include two NAs for the "utci_bins" text and the column that results
+    # of splitting the "::", this way those columns are not created:
+    names = c("income", "age", "sex", NA, NA, "utci_bins")) |>
+  # The values still have the name of the original variable in front of
+  # them, we remove those:
+  mutate(
+    "income" = str_remove(income, "^ine_income_tercile"),
+    "age" = str_remove(age, "^age"),
+    "sex" = str_remove(sex, "^sex"),
+    # The same scale we used for models A to D:
+    "income_level" = case_when(
+      income == "low" ~ "Low",
+      income == "middle" ~ "Middle",
+      income == "high" ~ "High") |>
+      factor(levels = c("Low", "Middle", "High")),
+    # The activities in the order we always use them, so that the facets do not
+    # come out alphabetically:
+    "activity_destination" = factor(
+      activity_destination,
+      levels = c("work_or_study", "frequent_activity",
+                 "infrequent_activity")),
+    # And the same conversion into incidence rate ratios:
+    "irr" = exp(estimate),
+    "irr_low" = exp(conf.low),
+    "irr_high" = exp(conf.high))
+
+glimpse(coefficients_efg)
+```
+
+### Plot 3
+
+```{r}
+# Create the same binary variable we built for plot 1:
+data_plot_3 <- coefficients_efg |>
+  mutate("distinguishable" = if_else(irr_low > 1 | irr_high < 1, "Yes", "No"))
+```
+
+```{r}
+#| fig-width: 5.9
+#| fig-height: 5.5
+
+# Create the plot, similar to plot 1:
+plot_3 <- ggplot(data_plot_3,
+                 aes(y = utci_bins, x = irr, colour = income_level,
+                     group = interaction(income_level, sex))) +
+  geom_vline(xintercept = 1, linetype = "dashed", colour = "grey50") +
+  geom_linerange(aes(xmin = irr_low, xmax = irr_high), linewidth = 0.22,
+                 position = position_dodge(width = 0.9)) +
+  
+  # As in plot 1, all the points filled, and a white point one on top of the 
+  # one in which the CI crosses 1. Only this time we will also change the
+  # shape based on the gender (21 for women, 24 for men):
+  geom_point(aes(shape = sex, fill = income_level),
+             size = 1.5, stroke = 0.5,
+             position = position_dodge(width = 0.9)) +
+  geom_point(aes(shape = sex, size = distinguishable),
+             fill = "white", stroke = 0.5,
+             position = position_dodge(width = 0.9)) +
+  
+  # Crete a grid with activities rows and age in columns:
+  facet_grid(activity_destination ~ age,
+             labeller = labeller(activity_destination = activity_labels,
+                                 age = age_labels),
+             # Same as above, so that the strips appear outside:
+             switch = "y") +
+  
+  # Move the bin labels to the right and add some extra space so that the
+  # points at the top and bottom of each facet don't sit too close to the edge:
+  scale_y_discrete(position = "right", expand = expansion(add = 0.7)) +
+  
+  # Set the colors of the contour of the points and the interval lines:
+  scale_colour_manual(values = income_colours) +
+  # Se the shape assigned to each value (circle for women, triangle for men):
+  scale_shape_manual(values = c("female" = 21, "male" = 24),
+                     labels = c("female" = "Women", "male" = "Men")) +
+  # Se the color of the fill for the points:
+  scale_fill_manual(values = income_colours) +
+  
+  # Same as in plot 1, we make the size of the point on top 0 when the CI
+  # crosses 1 to get the effect we want (filled when it doesn't, white when
+  # it does):
+  scale_size_manual(values = c("Yes" = 0, "No" = 1.5)) +
+  
+  # Edit the legend so that we get just one legend that reflects both the
+  # fill, the color, and the shape:
+  guides(
+    fill = "none", size = "none",
+    colour = guide_legend(order = 1,
+                          override.aes = list(shape = 21,
+                                              fill = income_colours)),
+    shape = guide_legend(order = 2,
+                         override.aes = list(fill = "black",
+                                             colour = "black"))) +
+  
+  # Define the labels:
+  labs(y = "UTCI bin (°C)",
+       x = "Change in trips relative to the 25-30 °C bin (IRR)",
+       colour = "Income:", shape = "Sex:",
+       caption = "Hollow point: confidence interval crosses IRR = 1") +
+  
+  # Custom theme:
+  theme_tfm +
+  # And some tweaks:
+  theme(panel.grid.major.y = element_blank(),
+        strip.placement = "outside",
+        legend.position = "bottom",
+        # And the caption right under it, centred instead of to the right:
+        plot.caption = element_text(hjust = 0.5, margin = margin(t = -4)))
+
+plot_3
+
+# Save it:
+ggsave("../report/figures/rq2_irr_by_age_sex_pointrange.pdf", plot_3,
+       device = cairo_pdf,
+       width = 5.9, height = 5.5)
+```
+
+### Plot 4
+
+```{r}
+data_plot_4 <- coefficients_efg |>
+  # The side of the tile carries what the hollow points carry in plots 1 and 3.
+  # It is not a scale, so it draws no legend and the caption explains it:
+  mutate("tile_size" = if_else(irr_low > 1 | irr_high < 1,
+                               0.9, # Size if distinguishable from 0
+                               0.45)) # Size if not
+```
+
+```{r}
+#| fig-width: 5.9
+#| fig-height: 4.4
+
+# Create the plot:
+plot_4 <- ggplot(data_plot_4, aes(x = age, y = utci_bins, fill = irr)) +
+  
+  # Add the tiles:
+  geom_tile(aes(width = tile_size, height = tile_size)) +
+  
+  # One row per activity, and one column per income tercile, split by sex:
+  facet_grid(activity_destination ~ income_level + sex,
+             labeller = labeller(activity_destination = activity_labels,
+                                 sex = c("female" = "Women", "male" = "Men"))) +
+  # See `../dataviz_theme/dataviz_decisions.qmd` to read about the palette
+  # choice:
+  scale_fill_distiller(palette = "YlGnBu", direction = 1,
+                       # Set a wider bar, the default one is too short:
+                       guide = guide_colourbar(barwidth = unit(6, "cm"),
+                                               barheight = unit(0.3, "cm"))) +
+  
+  # Fix the coords with a ratio of 1 to make every tile a square:
+  coord_fixed(ratio = 1) +
+  labs(y = "UTCI bin (°C)", x = "Age group", fill = "IRR:",
+       caption = "Small cell: confidence interval crosses IRR = 1") +
+  
+  # Custom theme:
+  theme_tfm +
+  # And some tweaks:
+  theme(panel.grid = element_blank(),
+        legend.position = "bottom",
+        # The columns are narrow, so we rotate the labels so that they
+        # do not overlap_
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        # The caption under it, centred instead of to the right, we reduce
+        # some margin to make it a little bit closer to the legend.
+        plot.caption = element_text(hjust = 0.5, margin = margin(t = -4)))
+
+plot_4
+
+# Save it:
+ggsave("../report/figures/rq2_irr_tiles_heatmap.pdf", plot_4,
+       device = cairo_pdf,
+       width = 5.9, height = 4.4)
+```
