@@ -3,51 +3,46 @@
    \caption{\label{table_models_abc_45-50} Change in trips at UTCI 45-50 °C, against the 25-30 °C reference}
    \centering
    \small
-   \begin{tabular}{lccc}
-      \tabularnewline \midrule \midrule
-      Dependent Variable: & \multicolumn{3}{c}{Trips}\\
-                                                                      & A                     & B                    & C \\   
-      Model:                                                          & (1)                   & (2)                  & (3)\\  
-      \midrule
-      \emph{Variables}\\
-      Home $\times$ Income <10 $\times$ UTCI 45-50                    & 0.1067$^{*}$          & 0.0761$^{*}$         & 0.0354\\   
-                                                                      & (0.0547)              & (0.0404)             & (0.0250)\\   
-      Frequent activity $\times$ Income <10 $\times$ UTCI 45-50       & 0.7627$^{**}$         & 0.7256$^{**}$        & 0.3646\\   
-                                                                      & (0.3035)              & (0.2944)             & (0.4041)\\   
-      Infrequent activity $\times$ Income <10 $\times$ UTCI 45-50     & 0.6076$^{**}$         & 0.7181$^{**}$        & 0.5138\\   
-                                                                      & (0.2807)              & (0.2794)             & (0.3836)\\   
-      Work/study $\times$ Income <10 $\times$ UTCI 45-50              & 0.7483$^{***}$        & 0.7835$^{***}$       & 0.3907\\   
-                                                                      & (0.2874)              & (0.2691)             & (0.4043)\\   
-      Home $\times$ Income 10-15 $\times$ UTCI 45-50                  & -0.1308$^{***}$       & -0.1181$^{***}$      & -0.0339$^{***}$\\   
-                                                                      & (0.0499)              & (0.0432)             & (0.0094)\\   
-      Frequent activity $\times$ Income 10-15 $\times$ UTCI 45-50     & -0.1714$^{*}$         & -0.1742              & 0.2255$^{*}$\\   
-                                                                      & (0.1014)              & (0.1069)             & (0.1245)\\   
-      Infrequent activity $\times$ Income 10-15 $\times$ UTCI 45-50   & -0.2551$^{**}$        & -0.2612$^{**}$       & 0.1399\\   
-                                                                      & (0.1018)              & (0.1319)             & (0.0975)\\   
-      Work/study $\times$ Income 10-15 $\times$ UTCI 45-50            & -0.1477               & -0.1327              & 0.2778$^{**}$\\   
-                                                                      & (0.1020)              & (0.1023)             & (0.1297)\\   
-      Home $\times$ Income >15 $\times$ UTCI 45-50                    & -0.8315$^{***}$       & -0.7831$^{***}$      & -0.1418$^{***}$\\   
-                                                                      & (0.1759)              & (0.1661)             & (0.0367)\\   
-      Frequent activity $\times$ Income >15 $\times$ UTCI 45-50       & -1.313$^{***}$        & -1.261$^{***}$       & -0.7846$^{***}$\\   
-                                                                      & (0.4023)              & (0.4002)             & (0.2952)\\   
-      Infrequent activity $\times$ Income >15 $\times$ UTCI 45-50     & -1.049$^{***}$        & -1.332$^{***}$       & -0.9026$^{***}$\\   
-                                                                      & (0.2579)              & (0.4319)             & (0.3005)\\   
-      Work/study $\times$ Income >15 $\times$ UTCI 45-50              & -1.201$^{***}$        & -1.121$^{***}$       & -0.7368$^{**}$\\   
-                                                                      & (0.3874)              & (0.3761)             & (0.2880)\\   
-      \midrule
-      \emph{Fixed-effects}\\
-      Date                                                            & Yes                   & Yes                  & Yes\\  
-      District                                                        & Yes                   & Yes                  & Yes\\  
-      \midrule
-      \emph{Fit statistics}\\
-      Observations                                                    & 11,126,126            & 10,487,363           & 9,135,368\\  
-      Squared Correlation                                             & 0.65826               & 0.70860              & 0.87718\\  
-      Pseudo R$^2$                                                    & 0.76956               & 0.79261              & 0.86521\\  
-      BIC                                                             & $2.48\times 10^{10}$  & $1.8\times 10^{10}$  & $1.1\times 10^{10}$\\   
-      \midrule \midrule
-      \multicolumn{4}{l}{\emph{Clustered (province) standard-errors in parentheses}}\\
-      \multicolumn{4}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
-   \end{tabular}
+   \begin{adjustbox}{width = \textwidth, center}
+      \begin{tabular}{lccc}
+         \tabularnewline \midrule \midrule
+         Dependent Variable: & \multicolumn{3}{c}{Trips}\\
+                                                                         & Full sample, MITMS income & Subsample, MITMS income & Subsample, INE income \\   
+         Model:                                                          & (1)                       & (2)                     & (3)\\  
+         \midrule
+         \emph{Variables}\\
+         Frequent activity $\times$ Income <10 $\times$ UTCI 45-50       & 0.8510$^{***}$            & 0.7829$^{***}$          & 0.4087\\   
+                                                                         & (0.3080)                  & (0.2976)                & (0.4079)\\   
+         Infrequent activity $\times$ Income <10 $\times$ UTCI 45-50     & 0.6741$^{**}$             & 0.7647$^{***}$          & 0.5420\\   
+                                                                         & (0.2842)                  & (0.2815)                & (0.3851)\\   
+         Work/study $\times$ Income <10 $\times$ UTCI 45-50              & 0.8072$^{***}$            & 0.8139$^{***}$          & 0.4238\\   
+                                                                         & (0.2962)                  & (0.2763)                & (0.4074)\\   
+         Frequent activity $\times$ Income 10-15 $\times$ UTCI 45-50     & -0.1526                   & -0.1732                 & 0.2663$^{**}$\\   
+                                                                         & (0.1013)                  & (0.1069)                & (0.1167)\\   
+         Infrequent activity $\times$ Income 10-15 $\times$ UTCI 45-50   & -0.2382$^{**}$            & -0.2638$^{**}$          & 0.1733$^{*}$\\   
+                                                                         & (0.1023)                  & (0.1341)                & (0.0892)\\   
+         Work/study $\times$ Income 10-15 $\times$ UTCI 45-50            & -0.1372                   & -0.1407                 & 0.3067$^{**}$\\   
+                                                                         & (0.1034)                  & (0.1039)                & (0.1233)\\   
+         Frequent activity $\times$ Income >15 $\times$ UTCI 45-50       & -1.331$^{***}$            & -1.312$^{***}$          & -0.7936$^{***}$\\   
+                                                                         & (0.4058)                  & (0.4154)                & (0.3019)\\   
+         Infrequent activity $\times$ Income >15 $\times$ UTCI 45-50     & -1.060$^{***}$            & -1.380$^{***}$          & -0.9102$^{***}$\\   
+                                                                         & (0.2618)                  & (0.4439)                & (0.3065)\\   
+         Work/study $\times$ Income >15 $\times$ UTCI 45-50              & -1.242$^{***}$            & -1.178$^{***}$          & -0.7548$^{**}$\\   
+                                                                         & (0.4004)                  & (0.3939)                & (0.2952)\\   
+         \midrule
+         \emph{Fixed-effects}\\
+         Date                                                            & Yes                       & Yes                     & Yes\\  
+         District                                                        & Yes                       & Yes                     & Yes\\  
+         \midrule
+         \emph{Fit statistics}\\
+         Observations                                                    & 7,168,534                 & 6,707,614               & 5,982,931\\  
+         Squared Correlation                                             & 0.61229                   & 0.56115                 & 0.58916\\  
+         Pseudo R$^2$                                                    & 0.74392                   & 0.70911                 & 0.74141\\  
+         \midrule \midrule
+         \multicolumn{4}{l}{\emph{Clustered (province) standard-errors in parentheses}}\\
+         \multicolumn{4}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+      \end{tabular}
+   \end{adjustbox}
 \end{table}
 
 
