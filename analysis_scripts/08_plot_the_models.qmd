@@ -40,6 +40,10 @@ model_labels <- c("model_a" = "A: full sample",
                   "model_c" = "C: INE income",
                   "model_d" = "D: INE terciles")
 
+rq2_model_labels <- c("work_or_study" = "E: Work/study",
+                      "frequent_activity" = "F: Frequent",
+                      "infrequent_activity" = "G: Infrequent")
+
 # Activity labels:
 activity_labels <- c("work_or_study" = "Work/study",
                      "frequent_activity" = "Frequent",
@@ -194,6 +198,9 @@ plot_1 <- ggplot(data_plot_1,
              switch = "y") +
   # And place the utci bins to the right:
   scale_y_discrete(position = "right") +
+  # Use a logaritmic scale so that the visual representation shows the
+  # effects symmetrically in both directions:
+  scale_x_log10(breaks = c(0.25, 0.5, 1, 2, 4)) +
   
   # Set the color of the interval lines and the points contours:
   scale_colour_manual(values = income_colours) +
@@ -212,7 +219,7 @@ plot_1 <- ggplot(data_plot_1,
   # Define the labels. The hollow points have no legend of their own, so the
   # caption is the one that explains them:
   labs(y = "UTCI bin (°C)",
-       x = "Change in trips relative to the 25-30 °C bin (IRR)",
+       x = "Change in trips relative to the 25-30 °C bin (IRR, log scale)",
        colour = "Income:",
        caption = "Hollow point: confidence interval crosses IRR = 1") +
   
@@ -402,7 +409,7 @@ plot_3 <- ggplot(data_plot_3,
   
   # Crete a grid with activities rows and age in columns:
   facet_grid(activity_destination ~ age,
-             labeller = labeller(activity_destination = activity_labels,
+             labeller = labeller(activity_destination = rq2_model_labels,
                                  age = age_labels),
              # Same as above, so that the strips appear outside:
              switch = "y") +
@@ -410,6 +417,9 @@ plot_3 <- ggplot(data_plot_3,
   # Move the bin labels to the right and add some extra space so that the
   # points at the top and bottom of each facet don't sit too close to the edge:
   scale_y_discrete(position = "right", expand = expansion(add = 0.7)) +
+  # Use a logaritmic scale so that the visual representation shows the
+  # effects symmetrically in both directions:
+  scale_x_log10(breaks = c(0.5, 1, 2)) +
   
   # Set the colors of the contour of the points and the interval lines:
   scale_colour_manual(values = income_colours) +
@@ -437,7 +447,7 @@ plot_3 <- ggplot(data_plot_3,
   
   # Define the labels:
   labs(y = "UTCI bin (°C)",
-       x = "Change in trips relative to the 25-30 °C bin (IRR)",
+       x = "Change in trips relative to the 25-30 °C bin (IRR, log scale)",
        colour = "Income:", shape = "Sex:",
        caption = "Hollow point: confidence interval crosses IRR = 1") +
   
@@ -481,7 +491,7 @@ plot_4 <- ggplot(data_plot_4, aes(x = age, y = utci_bins, fill = irr)) +
   
   # One row per activity, and one column per income tercile, split by sex:
   facet_grid(activity_destination ~ income_level + sex,
-             labeller = labeller(activity_destination = activity_labels,
+             labeller = labeller(activity_destination = rq2_model_labels,
                                  sex = c("female" = "Women", "male" = "Men"))) +
   # See `../dataviz_theme/dataviz_decisions.qmd` to read about the palette
   # choice:
