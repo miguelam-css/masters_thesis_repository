@@ -23,6 +23,7 @@ library(stringr)
 library(tibble)
 library(ggplot2)
 library(RColorBrewer)
+library(knitr)
 
 
 # We defined a custom theme for all the figures in the masters thesis:
@@ -302,6 +303,46 @@ plot_2
 ggsave("../report/figures/rq1_income_gap_lollipop.pdf", plot_2,
        device = cairo_pdf,
        width = 5.9, height = 3)
+```
+
+## Reproduction models figures
+
+Models A, B and C estimate the same cells, so we can measure how much each coefficient changes when we change the sample (model A to model B) and when we change the reference year of the income data (B to C). We work with the estimates in logs to get the average change in the estimates between models.
+
+
+```{r}
+model_distances <- coefficients_abcd |>
+  # Select the relevant models:
+  filter(model %in% c("model_a", "model_b", "model_c")) |>
+  # We keep only what identifies a cell and the estimate:
+  select(model, activity_destination, income_level, utci_bins, estimate) |>
+  # Pivot wider to have one row per cell and one column per model, so that we
+  # can substract them:
+  pivot_wider(names_from = model, values_from = estimate) |>
+  # The distance between two models, in absolute value:
+  mutate("a_to_b" = abs(model_a - model_b),
+         "b_to_c" = abs(model_b - model_c)) |>
+  # And we summarise both distances by temperature bin:
+  group_by(utci_bins) |>
+  summarise(across(c(a_to_b, b_to_c),
+                   list("mean" = mean, "max" = max)))
+
+model_distances
+```
+
+And we export it for the report:
+
+```{r}
+model_distances |>
+  # We set readable column names:
+  rename("UTCI bin" = utci_bins,
+         "Mean A to B" = a_to_b_mean, "Max. A to B" = a_to_b_max,
+         "Mean B to C" = b_to_c_mean, "Max. B to C" = b_to_c_max) |>
+  # Export to latex, rounded to 3 digits.
+  kable(format = "latex", booktabs = TRUE,
+               digits = 3,
+               label = "model_distances") |>
+  writeLines("../report/tables/table_model_distances.tex")
 ```
 
 ## Intersectionality models plots
