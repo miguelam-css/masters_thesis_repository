@@ -5,8 +5,11 @@ format: html
 editor: visual
 ---
 
+## Overview
+
 In this document we extract the UTCI of each MITMS zone for each hour in our study period. Since some zones fall in areas covered by two cells of the UTCI raster, we compute the weighted UTCI based on the area of the district that falls within each cell. We save the result in an .rds file.
 
+# Set up
 
 ```{r}
 #| message: false
@@ -24,9 +27,7 @@ library(exactextractr)
 
 ## Checking the data for 1 day
 
-> “ERA5 provides consistent time series of multiple climate variables. Each time series is a sequence of spatial grids at 0.25° resolution (approximately 31 km at the equator) and hourly intervals.” (Di Napoli et al., 2021, p. 4)
-
-> “To ease transmission and retrieval from the database stacks are packaged in files of 24 hourly layers covering the full day period (00-23UTC). Layers are defined on a regular grid in the World Geodetic System 1984 (WGS 84). Each grid is made of 601 rows and 1,440 columns. MRT and UTCI data are stored in Kelvin (K). They can be converted into degree Celsius (°C) by subtracting 273.15.” (Di Napoli et al., 2021, p. 4)
+As Di Napoli et al. (2021, p.4) explain “ERA5 provides consistent time series of multiple climate variables. Each time series is a sequence of spatial grids at 0.25° resolution (approximately 31 km at the equator) and hourly intervals.”, in order “to ease transmission and retrieval from the database stacks are packaged in files of 24 hourly layers covering the full day period (00-23UTC). Layers are defined on a regular grid in the World Geodetic System 1984 (WGS 84). Each grid is made of 601 rows and 1,440 columns. MRT and UTCI data are stored in Kelvin (K). They can be converted into degree Celsius (°C) by subtracting 273.15”.
 
 We verify the data is correct checking one day (the first in our study period, 1st of May 2022):
 
