@@ -5,7 +5,11 @@ format: html
 editor: visual
 ---
 
-In this document we build the panels the models need. We begin by taking the daily trips dataset we built in script 02, and attaching two values to each row: the UTCI of the district where the trip ends and the INE income of the district where the traveller lives. We then sum the trips, grouping by (that is, keeping only) the variables the models use (date, destination district, destination activity, UTCI, income, age and sex). This results in an intermediary table with one row per district, day and combination of those variables. That table is too big for most personal computers to hold in session memory, so we write it in a DuckDB database for reproducibility. We then save two smaller tables into .rds files: one without age and sex, used for the four models that reproduce Renninger and Cabrera (2026) and answer RQ1; and one that keeps age and sex, for the models that answer RQ2.
+## Overview and set up
+
+In this document we build the panels the models need. We begin by taking the daily trips dataset we built in script 02, and attaching two values to each row: the UTCI of the district where the trip ends and the INE income of the district where the traveler lives. We then sum the trips, grouping by (that is, keeping only) the variables the models use (date, destination district, destination activity, UTCI, income, age and sex). This results in an intermediary table with one row per district, day and combination of those variables. That table is too big for most personal computers to hold in session memory, so we write it in a DuckDB database for easier reproducibility. From it we then save two smaller tables into .rds files: one without age and sex, used for the four models that reproduce Renninger and Cabrera (2026) and answer RQ1; and one that keeps age and sex, for the models that answer RQ2.
+
+We do all of this twice, once for each of the two samples. Renninger and Cabrera (2026) describe their sample in an unclear way, to be sure we are using the same sample as they do, we try two different samples. One follows their description of the model target variable in the supplementary material: trips "terminating in district i"m, which include trips arriving from any other district. The other one follows their description in the footnote to table S4: "Poisson regressions of flows within districts", which includes only the trips with origin and destination at the same district.
 
 We don't include the trips whose activity at destination is "home" in any of the models. Renninger and Cabrera (2026) never say whether they include them or not, we interpret that as an exclusion because of three reasons: first, because "home" does not appear anywhere in their results: it doesn't appear in Table S1 of the supplementary material, which reports the descriptive statistics for the other three activities, doesn't appear in Table S2 (*Impact of Extreme Heat (UTCI \> 40 °C) on Mobility by Activity Type*), and neither in Tables S3, S4 and S5, which cross activity with age, income, and gender, respectively. Second, because in table S1 from the supplementary material, the percentages of share of trips add up to 100% without including the "home" trips, and that set of trips is described in the footnote as "trip shares are computed as the fraction of all trips in the country", which suggest trips with destination home were excluded. Third, and this also a substantive argument to support our decision to not include home trips in the intersectionality models either: trips ending at home are different in nature from the rest, since the trips with destination home are trips that departed from home in the first place, and most trips will always end at home in a daily panel.
 
@@ -21,7 +25,10 @@ library(DBI)
 library(duckdb)
 ```
 
+
 ## Connect to the daily trips DuckDB
+
+The filters below are the ones both samples share.
 
 ```{r}
 # We connect to the MITMS daily trips duckdb:
@@ -82,7 +89,25 @@ utci_db <- tbl(mitma_daily_con, "utci_1400")
 income_db <- tbl(mitma_daily_con, "income_data")
 ```
 
-## Add UTCI and INE income
+Finally, the dates we loop over below. They are the same for both samples:
+
+```{r}
+# The dates of the study period. They have to be characters, the for loop
+# converts the "date" class into numbers, we need the full string to be
+# able to join by date with the mitma_daily DuckDB database:
+study_dates <- c(
+  seq(as_date("2022-05-01"), as_date("2022-09-30")),
+  seq(as_date("2023-05-01"), as_date("2023-09-30"))
+  ) |>
+  as.character()
+
+# Create the directory both samples write into:
+dir.create("../data/model_panels", showWarnings = FALSE, recursive = TRUE)
+```
+
+## Sample 1: trips terminating in the district
+
+### Add UTCI and INE income
 
 We now add UTCI and INE income to the daily trips table in order to create the intermediary table from which we will extract the panels for the reproduction models and the intersectionality models. This intermediary table needs to keep all of the following variables:
 
@@ -99,11 +124,6 @@ As mentioned above, since the whole panel won't fit the memory of most personal 
 ```{r}
 # We open a second connection, for writing the result. It gets its own RAM and
 # CPU limits, lower than they'd be if we only had one connection open.
-
-# Create the directory:
-dir.create("../data/model_panels", showWarnings = FALSE, recursive = TRUE)
-
-# And the duckDB connection:
 model_panel_con <- dbConnect(
   duckdb(),
   dbdir = "../data/model_panels/model_panel.duckdb"
@@ -116,17 +136,6 @@ dbExecute(model_panel_con, "SET threads = 12")
 ```
 
 Since `dbWriteTable()` needs a real data frame and the whole panel does not fit most personal computers RAM memory, we write it day by day, as we did when building `mitma_daily`.
-
-```{r}
-# The dates of the study period. They have to be characters, the for loop 
-# converts the "date" class into numbers, we need the full string to be 
-# able to join by date with the mitma_daily DuckDB database:
-study_dates <- c(
-  seq(as_date("2022-05-01"), as_date("2022-09-30")),
-  seq(as_date("2023-05-01"), as_date("2023-09-30"))
-  ) |>
-  as.character()
-```
 
 ```{r}
 # Run the for loop for every day in our study period:
@@ -158,14 +167,13 @@ for (one_date in study_dates) {
       # the first two digits of the district id:
       "province" = str_sub(id_destination, end = 2))
 
-
   # And we add this day to the DuckDB table:
   dbWriteTable(model_panel_con, "trips_panel_demographic", one_day_panel,
                append = TRUE)
 }
 ```
 
-## The reproduction panel (models A, B, C and D)
+### The reproduction panel
 
 Save the panel for the reproduction models:
 
@@ -198,7 +206,7 @@ saveRDS(panel_reproduction, "../data/model_panels/panel_reproduction.rds")
 rm(panel_reproduction)
 ```
 
-## The intersectionality panel (models E, F, and G)
+### The intersectionality panel
 
 Save the panel for the intersectionality models:
 
@@ -234,11 +242,157 @@ glimpse(panel_intersectionality)
 
 ```{r}
 saveRDS(panel_intersectionality, "../data/model_panels/panel_intersectionality.rds")
+
+# Once saved, we remove it and close this sample's connection, so that the
+# second sample starts with as much free RAM memory as possible:
+rm(panel_intersectionality)
+dbDisconnect(model_panel_con, shutdown = TRUE)
+```
+
+## Sample 2: flows within districts
+
+### Restrict the trips to the flows within each district
+
+This is the only difference between the two samples: we keep the trips whose origin and destination are the same district. 
+
+```{r}
+mitma_daily_within <- mitma_daily |>
+  filter(id_origin == id_destination)
+```
+
+Everything below repeats what we just did with sample 1, but saving the files with the `_within` suffix.
+
+### Add UTCI and INE income
+
+The intermediary table of this sample keeps the same variables as the one above, and is written to its own DuckDB database. It cannot be derived from the previous one because all different origins sharing a destination are grouped, we lose `id_origin`.
+
+```{r}
+# Again, a second connection for writing the result, with its own RAM and
+# CPU limits:
+model_panel_within_con <- dbConnect(
+  duckdb(),
+  dbdir = "../data/model_panels/model_panel_within.duckdb"
+  )
+
+# We set the maximum CPU threads and RAM usage, we are working on a powerful
+# computer, these values should be adapted to your machine:
+dbExecute(model_panel_within_con, "SET memory_limit = '64GB'")
+dbExecute(model_panel_within_con, "SET threads = 12")
+```
+
+```{r}
+# Run the for loop for every day in our study period:
+for (one_date in study_dates) {
+
+  # Save a tibble with one day of the panel
+  one_day_panel <- mitma_daily_within |>
+    filter(date == one_date) |>
+    # Join the INE income with mitma_daily:
+    left_join(income_db, by = join_by(home_id == mitma_zone_id, year)) |>
+    # Join the UTCI data with mitma_daily:
+    left_join(utci_db, by = join_by(id_destination == mitma_zone_id, date)) |>
+    # Group by id_destination because we will use the number of trips to
+    # destination district as our outcome variable, also by all the other
+    # variables we need to keep for the models:
+    group_by(
+      date, id_destination,
+      activity_destination, income, age, sex, home_trip,
+      utci, ine_income_bracket, ine_income_tercile
+      ) |>
+    # And sum the trips:
+    summarise("n_trips" = sum(n_trips), .groups = "drop") |>
+    collect() |>
+    # DuckDB returns the ids as factors, and we want them as text in the
+    # panel so that later joins do not have to convert them:
+    mutate(
+      "id_destination" = as.character(id_destination),
+      # The province, to cluster the standard errors. It is
+      # the first two digits of the district id:
+      "province" = str_sub(id_destination, end = 2))
+
+  # And we add this day to the DuckDB table:
+  dbWriteTable(model_panel_within_con, "trips_panel_demographic", one_day_panel,
+               append = TRUE)
+}
+```
+
+### The reproduction panel
+
+Save the panel for the reproduction models:
+
+```{r}
+trips_panel_demographic_within <- tbl(model_panel_within_con,
+                                      "trips_panel_demographic")
+
+panel_reproduction_within <- trips_panel_demographic_within |>
+  # Group by everything but age and sex:
+  group_by(
+    date, id_destination, province, utci,
+    activity_destination, income, ine_income_bracket, ine_income_tercile,
+    home_trip) |>
+  # And sum the trips:
+  summarise("n_trips" = sum(n_trips), .groups = "drop") |>
+  collect() |>
+  # The activity variable is returned by the DuckDB as a factor that still
+  # has an empty category for the "home" trips we filtered out, we drop it:
+  mutate("activity_destination" = fct_drop(activity_destination))
+
+glimpse(panel_reproduction_within)
+```
+
+This one is small enough to be saved as an .rds and loaded into the session memory:
+
+```{r}
+saveRDS(panel_reproduction_within,
+        "../data/model_panels/panel_reproduction_within.rds")
+
+# Once saved, we remove it from the session to leave as much free RAM memory
+# as possible for the panel below:
+rm(panel_reproduction_within)
+```
+
+### The intersectionality panel
+
+Save the panel for the intersectionality models:
+
+```{r}
+panel_intersectionality_within <- trips_panel_demographic_within |>
+  # Keep only trips we can assign income to (home trips):
+  filter(home_trip == TRUE,
+         utci >= 25,
+         utci < 50) |>
+  # Group by the terciles of the INE income, and by age and sex:
+  group_by(date, id_destination,
+           province, # Needed for the cluster
+           utci, activity_destination, ine_income_tercile,
+           age, sex) |>
+  summarise("n_trips" = sum(n_trips), .groups = "drop") |>
+  collect() |>
+  # The activity variable is returned by the DuckDB as a factor that still
+  # has an empty category for the "home" trips we filtered out, we drop it:
+  mutate("activity_destination" = fct_drop(activity_destination)) |>
+  # Create the utci bins:
+  mutate(
+    "utci_bins" = case_when(
+      utci < 30 ~ "25-30",
+      utci < 35 ~ "30-35",
+      utci < 40 ~ "35-40",
+      utci < 45 ~ "40-45",
+      utci < 50 ~ "45-50")
+  ) |>
+  select(!utci)
+
+glimpse(panel_intersectionality_within)
+```
+
+```{r}
+saveRDS(panel_intersectionality_within,
+        "../data/model_panels/panel_intersectionality_within.rds")
 ```
 
 Finally, close the DuckDB connections.
 
 ```{r}
 dbDisconnect(mitma_daily_con, shutdown = TRUE)
-dbDisconnect(model_panel_con, shutdown = TRUE)
+dbDisconnect(model_panel_within_con, shutdown = TRUE)
 ```
