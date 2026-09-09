@@ -5,7 +5,11 @@ format: html
 editor: visual
 ---
 
+## Overview
+
 The geometries provided by the `spanishoddata` R package have the Canary islands in their actual geographical position. In this document we move them using `esp_move_can()` from the `mapSpain` package, and save the resulting data in an .rds file which we will load whenever we need to plot a map.
+
+## Set up
 
 ```{r}
 #| message: false
