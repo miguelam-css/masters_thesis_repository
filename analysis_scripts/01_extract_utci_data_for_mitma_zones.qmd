@@ -5,11 +5,9 @@ format: html
 editor: visual
 ---
 
-## Overview
+## Overview and set up
 
 In this document we extract the UTCI of each MITMS zone for each hour in our study period. Since some zones fall in areas covered by two cells of the UTCI raster, we compute the weighted UTCI based on the area of the district that falls within each cell. We save the result in an .rds file.
-
-## Set up
 
 ```{r}
 #| message: false
