@@ -5,7 +5,9 @@ format: html
 editor: visual
 ---
 
-In this document we build the INE income table: we assign to each MITMS district the mean net income per person of its census sections, taken from INE's ADRH and weighted by their population, for each year of our study period. We also create two new variables: a variable with the bracket the district would fall in if we used MITMS's income brackets (with cuts at 10 thousand and 15 thousand euros), and terciles wieghted by population. We save the result in an .rds file.
+## Overview and set up
+
+In this document we build the INE income table: we assign to each MITMS district the mean net income per person of its census sections, taken from INE's ADRH and weighted by their population, for each year of our study period. We also create two new variables: a variable with the bracket the district would fall in if we used MITMS's income brackets (with cuts at 10 thousand and 15 thousand euros), and terciles weighted by population. We save the result in an .rds file.
 
 ```{r}
 #| message: false
@@ -50,7 +52,7 @@ mitma_districts <- mitma_districts |>
   mutate("census_sections" = str_trim(census_sections))
 ```
 
-We check how the census section ids look to confirm the way to join with INE data later. According to the documentation \[CITAR BIEN\], they are ine section codes, but wether there are any MITMS zones without a section code or a different format in the section code (sometimes this dataset adds letters before or after for specific cases).
+We check how the census section ids look to confirm the way to join with INE data later. According to the documentation [Kotov and Lovelace (2026)](https://ropenspain.github.io/spanishoddata/articles/v2-2022-onwards-mitma-data-codebook), they are INE section codes, but we check whether there are any MITMS zones without a section code or a different format in the section code (sometimes this dataset adds letters before or after for specific cases).
 
 ```{r}
 glimpse(mitma_districts)
@@ -261,12 +263,12 @@ adrh_mitma <- adrh_mitma |>
 
 ## Income weighted mean for each MITMS district
 
-As we've seen, a MITMS zone often includes multiple INE census sections. A simple average over the section would mean we give the same weight to every section no matter its population, no matter if it had 500 or 5000 inhabitants. We thus weight each section by its population when computing the mean income for each MITMS zone.
+As we've seen, a MITMS zone often includes multiple INE census sections. A simple average over the sections would mean we give the same weight to every section no matter its population, no matter if it had 500 or 5000 inhabitants. We thus weight each section by its population when computing the mean income for each MITMS zone.
 
 First, we filter out sections without income or population (since we cannot compute the weighted mean if one of those two is missing):
 
 ```{r}
-# We see hoy many are there:
+# We see how many are there:
 adrh_mitma |>
   filter(is.na(mean_net_income_person) | is.na(population)) |>
   count(year)
