@@ -5,9 +5,11 @@ format: html
 editor: visual
 ---
 
+## Overview and set up
+
 In their models, Renninger and Cabrera “use zonal statistics to compute the mean UTCI at 16:00 for each district on each day.” (Renninger and Cabrera, 2026, Supplementary Material, p. 2). We would like to follow their decision here, however, it is not clear what 16:00 means, and it isn't specified anywhere. It could either be 16:00 UTC or 16:00 local time.
 
-In order to take this decision, in this document we check at what time districts reach their peak UTCI to decide what hour to use. As can be seen below, the result is 14:00 UTC (16:00 local).
+In order to take this decision, in this document we check at what time districts reach their peak UTCI to decide what hour to use. The result (see the last chunk) is 14:00 UTC (16:00 local).
 
 ```{r}
 #| message: false
@@ -22,7 +24,9 @@ library(stringr)
 source("../dataviz_theme/theme_tfm.R")
 ```
 
-We load the dataset with the hourly UTCI by MTIMA zone:
+## Load the dataset
+
+We load the dataset with the hourly UTCI by MITMS zone:
 
 ```{r}
 utci_per_mitma <- readRDS("../data/mitma_zones_utci_added/utci_per_mitma.rds")
@@ -33,6 +37,8 @@ utci_per_mitma <- utci_per_mitma |>
 
 glimpse(utci_per_mitma)
 ```
+
+## Find peak UTCI
 
 We average each hour column, so that every district gets their mean per hour:
 
@@ -99,7 +105,7 @@ ggplot(utci_hour_mean,
   theme_tfm
 ```
 
-Find out exactly when most districts reach their Revpeak UTCI:
+Find out exactly when most districts reach their peak UTCI:
 
 ```{r}
 utci_hour_mean |>
@@ -108,4 +114,4 @@ utci_hour_mean |>
   slice_max(n_districts, n = 5)
 ```
 
-The hour when most districts reach their peak UTCI is 14:00 UTC, that is 16:00 local time, followed by 13:00 UTCI (15:00 local) and 15:00 UTC (17:00 local). We will thus be using 14:00 UTC (16:00 local).
+The hour when most districts reach their peak UTCI is 14:00 UTC, that is 16:00 local time, followed by 13:00 UTC (15:00 local) and 15:00 UTC (17:00 local). We will thus be using 14:00 UTC (16:00 local).
