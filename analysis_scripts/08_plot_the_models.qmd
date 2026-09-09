@@ -309,7 +309,6 @@ ggsave("../report/figures/rq1_income_gap_lollipop.pdf", plot_2,
 
 Models A, B and C estimate the same cells, so we can measure how much each coefficient changes when we change the sample (model A to model B) and when we change the reference year of the income data (B to C). We work with the estimates in logs to get the average change in the estimates between models.
 
-
 ```{r}
 model_distances <- coefficients_abcd |>
   # Select the relevant models:

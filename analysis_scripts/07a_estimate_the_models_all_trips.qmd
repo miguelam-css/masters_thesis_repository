@@ -1,21 +1,17 @@
 ---
-title: "Estimating the models"
+title: "Estimating the models (terminating trips)"
 author: "Miguel Agenjo Montejo"
 format: html
 editor: visual
 ---
 
-## Overview
+## Overview and set up
 
-In this document we run two sets of models: the first set (reproduction models) are the models that allow us to reproduce Renninger and Cabrera (2026) and answer RQ1, the second set (intersectionality models) are the models that allow us to answer RQ2.
+In this document we run the reproduction models, the ones that allow us to reproduce Renninger and Cabrera (2026) and answer RQ1, on the first of the two samples built in `06_build_panels_for_models.qmd`: the trips terminating in the district. The same models are run on the other sample in `07b_estimate_the_models_within_district.qmd`, which also holds the intersectionality models that answer RQ2. This sample is reported as a contrast, so we do not estimate the intersectionality models on it.
 
 The first four models share the same specification, and differ only in the income variable used (and the subset of trips that variable can be assigned to): model A (full sample of trips, MITMS income) uses all the trips in the sample and the income variable provided by the MITMS dataset; model B (subsample, MITMS income), uses just the subsample of trips with origin home, keeping the income variable provided by the MITMS dataset; model C (subsample, INE income) uses the same subsample of trips but instead of the MITMS income variable, it uses the the income data obtained from INE's ADRH, converted into the same three brackets (with cuts at 10,000 and 15,000 euros) that the MITMS dataset uses; finally, model D (subsample, INE terciles) uses the same subset of trips with origin home and the income variable from INE, but this time organized in terciles weighted by census section population instead of using the MITMS cuts.
 
-The second set of models share the same specification between them (similar to the models above, they use INE income terciles and let that income variable interact with gender and age), and differ only in the activity of the trips: work or study (model E), frequent (model F), and infrequent trips (model G). We had to take this decision to run three separated models because we lacked the computational capacity for `fepois()` to be able to run all interactions including activity type, and comparisons between activity types are the least critical for our RQ.
-
-Regarding the computational requirements to run the models: the reproduction models (A, B, C, and D) need nearly 25GB of free RAM if run one by one (that is, restarting the R Session to free up as much memory as needed right before running the chunk with the `fepois()`), we recommend making sure you have at least 25GB of free RAM before running each model. The intersectionality models (E, F, and G) require nearly 85GB of RAM, we thus recommend making sure you have at least that amount of free space before running each of the chunks containing a `fepois()`.
-
-## Library set up
+Regarding the computational requirements to run the models: the reproduction models (A, B, C, and D) need nearly 25GB of free RAM if run one by one. In other words: an R Session restarted just before running the chunk with `fepois()` peaks at 25GB of RAM when running that chunk; we recommend making sure you have enough RAM available before running each model.
 
 ```{r}
 #| message: false
@@ -66,7 +62,7 @@ panel_a |> summarise(across(everything(), ~ sum(is.na(.x))))
 # There are no NAs
 ```
 
-While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating swap memory (they require nearly 25GB of RAM to run, we recommend making sure you have some more than that).- We save the .rds files so that on a smaller personal computer each model can be estimated in a new seesion by restarting R just before running the chunk, which can just load `fixest`, read the panel from the .rds, and run `fepois()` with as much free RAM as possible.
+While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating swap memory (they require nearly 25GB of RAM to run, we recommend making sure you have some more than that). We save the .rds files so that on a smaller personal computer each model can be estimated in a new seesion by restarting R just before running the chunk, which can just load `fixest`, read the panel from the .rds, and run `fepois()` with as much free RAM as possible.
 
 ```{r}
 # To allow  fepois() to run in a session with as much free RAM as possible,
@@ -436,9 +432,12 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
          fitstat = ~ n + sq.cor + pr2,
          title = paste0("Change in trips at UTCI ",
                         utci_bin,
-                        " °C, against the 25-30 °C reference"),
-         # The LaTeX label, we will use this to reference the table:
-         label = paste0("table_models_abc_", utci_bin),
+                        " °C, against the 25-30 °C reference. ",
+                        "Sample: trips terminating in the district"),
+         # The LaTeX label, we will use this to reference the table. The same
+         # models are estimated on the two samples, so the label says which one
+         # this table comes from:
+         label = paste0("table_models_abc_terminating_", utci_bin),
          fontsize = "small",
          # The model names make the table wider than the text block, we use
          # adjustbox to allow LaTeX to adjust the tables, the package
@@ -463,350 +462,6 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
          tex = TRUE,
          file = paste0("../report/tables/table_model_d_",
                        utci_bin, ".tex"),
-         replace = TRUE)
-}
-```
-
-## Intersectionality models (E, F, G)
-
-### Load data
-
-The three models share the panel built in `06_build_panels_for_models.qmd`, so we just read it:
-
-```{r}
-# Loading these libraries is needed for users that restart R before running.
-library(dplyr)
-library(tidyr)
-
-panel_intersectionality <- readRDS("../data/model_panels/panel_intersectionality.rds")
-
-glimpse(panel_intersectionality)
-```
-
-```{r}
-# Check if there are any NAs before passing the panel to fepois():
-panel_intersectionality |> summarise(across(everything(), ~ sum(is.na(.x))))
-
-# Check how many trips those NAs are:
-
-# Income NAs:
-panel_intersectionality |>
-  mutate("missing_ine_income_tercile" = is.na(ine_income_tercile)) |>
-  summarise("rows" = n(), "trips" = sum(n_trips),
-            .by = missing_ine_income_tercile) |>
-  mutate("pct_rows" = rows / sum(rows) * 100,
-         "pct_trips" = trips / sum(trips) * 100)
-
-# Age NAs
-panel_intersectionality |>
-  mutate("missing_age" = is.na(age)) |>
-  summarise("rows" = n(), "trips" = sum(n_trips), .by = missing_age) |>
-  mutate("pct_rows" = rows / sum(rows) * 100,
-         "pct_trips" = trips / sum(trips) * 100)
-
-# Sex NAs
-panel_intersectionality |>
-  mutate("missing_sex" = is.na(sex)) |>
-  summarise("rows" = n(), "trips" = sum(n_trips), .by = missing_sex) |>
-  mutate("pct_rows" = rows / sum(rows) * 100,
-         "pct_trips" = trips / sum(trips) * 100)
-```
-
-Three columns include NAs: `ine_income_tercile`, `age`, and `sex`. The missing trips on `ine_income_tercile` are just 0.03% (0.26% of rows), but in `age` and `sex` we are losing a significant amount of trips: 25.19% for `age` and 37.87% for `sex` (10.48% and 40.37% of the rows, respectively). But this does not mean we are losing the sum of these trips, since there could be NAs in the same row.
-
-```{r}
-# Check how many trips are missing any variable:
-panel_intersectionality |>
-  mutate("missing_any" = if_any(c(ine_income_tercile, age, sex), is.na)) |>
-  summarise("rows" = n(), "trips" = sum(n_trips), .by = missing_any) |>
-  mutate("pct_rows" = rows / sum(rows) * 100,
-         "pct_trips" = trips / sum(trips) * 100)
-```
-
-A 37.89% of the trips are missing at least one of these variables (40.50% of the rows), but we still have data on over 6.4 billion trips (over 35 million rows). We check whether these trips concentrate in an income tercile:
-
-```{r}
-# The same count, this time within each income tercile, so that the percentages
-# are the share lost inside the tercile and not the share of the whole panel:
-panel_intersectionality |>
-  mutate("missing_any" = if_any(c(age, sex), is.na)) |>
-  summarise("rows" = n(), "trips" = sum(n_trips),
-            .by = c(ine_income_tercile, missing_any)) |>
-  mutate("pct_rows" = rows / sum(rows) * 100,
-         "pct_trips" = trips / sum(trips) * 100,
-         .by = ine_income_tercile) |>
-  arrange(ine_income_tercile, missing_any)
-```
-
-The loss is not even in terms of trips: we lose 47.35% of the trips of the low tercile (44.95% of the rows), 37.13% of the trips in the middle tercile (39.76% of the rows), and only 29.02% of the trips (36.28% of rows) in the high one.
-
-And drop the missing trips:
-
-```{r}
-# Drop the rows with missing data:
-panel_intersectionality <- panel_intersectionality |> drop_na()
-
-# And save the clean panel, so that the three models start from it:
-saveRDS(panel_intersectionality, "../data/model_panels/panel_intersectionality_clean.rds")
-```
-
-### Full model attempt
-
-Before splitting the sample by activity we tried the full cross, which lets `activity_destination` interact with the other variables instead of separating it into its own model. Unluckily, it did not work due to memory issues, during the execution of `fepois()` RAM peaked twice (at 196GB and 204GB) before reaching the maximum of 256GB of RAM (and 8GB of swap) in our server and crashing. We leave the chunk commented out for transparency and reproducibility.
-
-```{r}
-# If working on a personal computer, restart R before running this chunk.
-
-# library(fixest) # Needed for users that restart R before running.
-# 
-# panel_intersectionality <- readRDS("../data/model_panels/panel_intersectionality_clean.rds")
-# 
-# model_full <- fepois(
-#   fml = n_trips ~ activity_destination * ine_income_tercile * age * sex +
-#     i(utci_bins, ref = "25-30"):activity_destination:ine_income_tercile:age:sex |
-#     date + id_destination,
-#   data = panel_intersectionality,
-#   cluster = ~province,
-#   # Clean intermediary objects as much as possible to free RAM space:
-#   mem.clean = TRUE,
-#   nthreads = 48 # Set this value according to your computer
-#   )
-# 
-# # And save it:
-# saveRDS(model_full, "../data/models/model_full.rds")
-```
-
-```{r}
-# Read the model to check everything worked out
-# model_full <- readRDS("../data/models/model_full.rds")
-# 
-# etable(model_full)
-```
-
-### Model E: work or study
-
-We build the panel for model E, for the subsample of trips with destination activity "work or study", allowing `ine_income_tercile`, `age` and `sex` to interact.
-
-We start by filtering for the appropriate subsample:
-
-```{r}
-# Loading these libraries is needed for users that restart R before running.
-library(dplyr)
-library(tidyr)
-
-panel_intersectionality <- readRDS("../data/model_panels/panel_intersectionality_clean.rds")
-
-panel_e <- panel_intersectionality |>
-  # Keep only the trips ending at work or study:
-  filter(activity_destination == "work_or_study") |>
-  # Every row has the same activity now, so we drop the variable:
-  select(!activity_destination)
-
-glimpse(panel_e)
-
-# To allow  fepois() to run in a session with as much free RAM as possible,
-# we save the panel in an RDS file:
-saveRDS(panel_e, "../data/model_panels/panel_e.rds")
-```
-
-And run the model:
-
-```{r}
-# If working on a personal computer, restart R before running this chunk.
-
-library(fixest) # Needed for users that restart R before running.
-
-panel_e <- readRDS("../data/model_panels/panel_e.rds")
-
-model_e <- fepois(
-  fml = n_trips ~ ine_income_tercile * age * sex +
-    i(utci_bins, ref = "25-30"):ine_income_tercile:age:sex | date + id_destination,
-  data = panel_e,
-  cluster = ~province,
-  # Clean intermediary objects as much as possible to free RAM space:
-  mem.clean = TRUE,
-  nthreads = 48 # Set this value according to your computer
-  )
-
-# And save it:
-saveRDS(model_e, "../data/models/model_e.rds")
-```
-
-We read the model to check everything worked:
-
-```{r}
-model_e <- readRDS("../data/models/model_e.rds")
-
-etable(model_e)
-```
-
-### Model F: frequent activities
-
-Repeat the same process for the trips with destination in a frequent activity.
-
-```{r}
-# Loading these libraries is needed for users that restart R before running.
-library(dplyr)
-library(tidyr)
-
-panel_intersectionality <- readRDS("../data/model_panels/panel_intersectionality_clean.rds")
-
-panel_f <- panel_intersectionality |>
-  # Keep only the trips ending at a frequent activity:
-  filter(activity_destination == "frequent_activity") |>
-  # Every row has the same activity now, so we drop the variable:
-  select(!activity_destination)
-
-glimpse(panel_f)
-
-# To allow  fepois() to run in a session with as much free RAM as possible,
-# we save the panel in an RDS file:
-saveRDS(panel_f, "../data/model_panels/panel_f.rds")
-```
-
-And run the model:
-
-```{r}
-# If working on a personal computer, restart R before running this chunk.
-
-library(fixest) # Needed for users that restart R before running.
-
-panel_f <- readRDS("../data/model_panels/panel_f.rds")
-
-model_f <- fepois(
-  fml = n_trips ~ ine_income_tercile * age * sex +
-    i(utci_bins, ref = "25-30"):ine_income_tercile:age:sex | date + id_destination,
-  data = panel_f,
-  cluster = ~province,
-  # Clean intermediary objects as much as possible to free RAM space:
-  mem.clean = TRUE,
-  nthreads = 48 # Set this value according to your computer
-  )
-
-# And save it:
-saveRDS(model_f, "../data/models/model_f.rds")
-```
-
-We read the model to check everything worked:
-
-```{r}
-model_f <- readRDS("../data/models/model_f.rds")
-
-etable(model_f)
-```
-
-### Model G: infrequent activities
-
-Repeat the process once again for the subsample of trips with destination in an infrequent activity.
-
-```{r}
-# Loading these libraries is needed for users that restart R before running.
-library(dplyr)
-library(tidyr)
-
-panel_intersectionality <- readRDS("../data/model_panels/panel_intersectionality_clean.rds")
-
-panel_g <- panel_intersectionality |>
-  # Keep only the trips ending at an infrequent activity:
-  filter(activity_destination == "infrequent_activity") |>
-  # Every row has the same activity now, so we drop the variable:
-  select(!activity_destination)
-
-glimpse(panel_g)
-
-# To allow  fepois() to run in a session with as much free RAM as possible,
-# we save the panel in an RDS file:
-saveRDS(panel_g, "../data/model_panels/panel_g.rds")
-```
-
-Run the model:
-
-```{r}
-# If working on a personal computer, restart R before running this chunk.
-
-library(fixest) # Needed for users that restart R before running.
-
-panel_g <- readRDS("../data/model_panels/panel_g.rds")
-
-model_g <- fepois(
-  fml = n_trips ~ ine_income_tercile * age * sex +
-    i(utci_bins, ref = "25-30"):ine_income_tercile:age:sex | date + id_destination,
-  data = panel_g,
-  cluster = ~province,
-  # Clean intermediary objects as much as possible to free RAM space:
-  mem.clean = TRUE,
-  nthreads = 48 # Set this value according to your computer
-  )
-
-# And save it:
-saveRDS(model_g, "../data/models/model_g.rds")
-```
-
-We read the model to check everything worked:
-
-```{r}
-model_g <- readRDS("../data/models/model_g.rds")
-
-etable(model_g)
-```
-
-### Export intersectionality models
-
-This time all the models share the coefficient names. We will create a table per temperature bin, with the activities in the columns, as we did for models A, B, C and D.
-
-```{r}
-# If working on a personal computer, restart R before running this chunk.
-
-library(fixest) # Needed for users that restart R before running.
-
-model_e <- readRDS("../data/models/model_e.rds")
-model_f <- readRDS("../data/models/model_f.rds")
-model_g <- readRDS("../data/models/model_g.rds")
-```
-
-```{r}
-# Create the dictionary as we did above:
-setFixest_dict(c(
-  "n_trips" = "Trips",
-  "utci_bins::30-35" = "UTCI 30-35",
-  "utci_bins::35-40" = "UTCI 35-40",
-  "utci_bins::40-45" = "UTCI 40-45",
-  "utci_bins::45-50" = "UTCI 45-50",
-  "ine_income_tercilelow" = "Low tercile",
-  "ine_income_tercilemiddle" = "Middle tercile",
-  "ine_income_tercilehigh" = "High tercile",
-  "age0-25" = "Age 0-25",
-  "age25-45" = "Age 25-45",
-  "age45-65" = "Age 45-65",
-  "age65-100" = "Age 65-100",
-  "sexfemale" = "Female",
-  "sexmale" = "Male",
-  "date" = "Date",
-  "id_destination" = "District"
-  ))
-```
-
-```{r}
-# Run the loop to create a table for each temperature bin:
-for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
-
-  etable(model_e,
-         model_f,
-         model_g,
-         headers = c("Work/study", "Frequent activity", "Infrequent activity"),
-         # Keep only the coefficients of this bin:
-         keep = utci_bin,
-         # Same as above, we print only the statistics we want (no BIC):
-         fitstat = ~ n + sq.cor + pr2,
-         title = paste0("Change in trips by income tercile, age and sex at UTCI ",
-                        utci_bin, " °C, against the 25-30 °C reference"),
-         label = paste0("table_intersectionality_", utci_bin),
-         # 24 coefficients over two lines each are too tall for one page, so we
-         # shrink the font and tighten the rows:
-         fontsize = "scriptsize",
-         arraystretch = 0.75,
-         tex = TRUE,
-         file = paste0("../report/tables/table_intersectionality_", utci_bin, ".tex"),
          replace = TRUE)
 }
 ```
