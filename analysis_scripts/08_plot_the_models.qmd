@@ -246,8 +246,10 @@ plot_1a <- ggplot(data_plot_1a,
     strip.placement = "outside",
     # Place the legend at the bottom:
     legend.position = "bottom",
+    # Move the legend up a little bit:
+    legend.box.spacing = unit(0, "pt"),
     # And the caption right under it, centered instead of to the right:
-    plot.caption = element_text(hjust = 0.5, margin = margin(t = -4)))
+    plot.caption = element_text(hjust = 0.5, margin = margin(t = -6)))
 
 plot_1a
 
@@ -342,8 +344,10 @@ plot_1b <- ggplot(data_plot_1b,
     strip.placement = "outside",
     # Place the legend at the bottom:
     legend.position = "bottom",
+    # Move the legend up a little bit:
+    legend.box.spacing = unit(0, "pt"),
     # And the caption right under it, centered instead of to the right:
-    plot.caption = element_text(hjust = 0.5, margin = margin(t = -4)))
+    plot.caption = element_text(hjust = 0.5, margin = margin(t = -6)))
 
 plot_1b
 
@@ -354,8 +358,6 @@ ggsave("../report/figures/plot1b_irr_by_income_pointrange_within.pdf",
        width = 5.9, height = 4.5,
        create.dir = TRUE)
 ```
-
-
 
 ## Intersectionality models plots
 
@@ -508,8 +510,10 @@ plot_2 <- ggplot(data_plot_2,
   theme(panel.grid.major.y = element_blank(),
         strip.placement = "outside",
         legend.position = "bottom",
+        # Move the legend up a little bit:
+        legend.box.spacing = unit(0, "pt"),
         # And the caption right under it, centered instead of to the right:
-        plot.caption = element_text(hjust = 0.5, margin = margin(t = -4)))
+        plot.caption = element_text(hjust = 0.5, margin = margin(t = -6)))
 
 plot_2
 
@@ -551,7 +555,10 @@ plot_3 <- ggplot(data_plot_3, aes(x = male, y = female,
 
   # One row per income tercile, and one column per activity:
   facet_grid(income_level ~ activity_destination,
-             labeller = labeller(activity_destination = activity_labels)) +
+             labeller = labeller(activity_destination = activity_labels,
+                                 income_level = c("Low" = "Low income",
+                                                  "Middle" = "Middle income",
+                                                  "High" = "High income"))) +
 
   # Set the color of the points based on the UTCI bin:
   scale_colour_manual(values = utci_colours) +
@@ -582,7 +589,11 @@ plot_3 <- ggplot(data_plot_3, aes(x = male, y = female,
         # One legend per row instead of both on the same one so that they fit
         # the page length:
         legend.box = "vertical",
-        legend.box.spacing = unit(0.4, "lines"))
+        # Get the two lines in the legend closer.
+        legend.spacing.y = unit(0, "pt"),
+        # Move the legend up a little bit:
+        legend.box.spacing = unit(2, "pt"),
+        legend.margin = margin(0, 0, 0, 0))
 
 plot_3
 
@@ -646,7 +657,12 @@ plot_4 <- ggplot(data_plot_4, aes(x = utci_bins, y = gap,
   # Custom theme:
   theme_tfm +
   # And some tweaks:
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom",
+        # Put the legend a bit closer:
+        legend.box.spacing = unit(1, "pt"),
+        # Make the left label text a little bit smaller:
+        axis.title.y = element_text(size = 9)
+        )
 
 plot_4
 
