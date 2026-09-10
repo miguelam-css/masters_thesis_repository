@@ -25,7 +25,6 @@ library(DBI)
 library(duckdb)
 ```
 
-
 ## Connect to the daily trips DuckDB
 
 The filters below are the ones both samples share.
@@ -181,6 +180,10 @@ Save the panel for the reproduction models:
 trips_panel_demographic <- tbl(model_panel_con, "trips_panel_demographic")
 
 panel_reproduction <- trips_panel_demographic |>
+  # Keep the days inside our bins, from 25 to 50 degrees. This also
+  # removes the UTCI NAs, which come from areas outside the Spanish borders:
+  filter(utci >= 25,
+         utci < 50) |>
   # Group by everything but age and sex:
   group_by(
     date, id_destination, province, utci,
@@ -195,8 +198,6 @@ panel_reproduction <- trips_panel_demographic |>
 
 glimpse(panel_reproduction)
 ```
-
-This one is small enough to be saved as an .rds and loaded into the session memory:
 
 ```{r}
 saveRDS(panel_reproduction, "../data/model_panels/panel_reproduction.rds")
@@ -253,7 +254,7 @@ dbDisconnect(model_panel_con, shutdown = TRUE)
 
 ### Restrict the trips to the flows within each district
 
-This is the only difference between the two samples: we keep the trips whose origin and destination are the same district. 
+This is the only difference between the two samples: we keep the trips whose origin and destination are the same district.
 
 ```{r}
 mitma_daily_within <- mitma_daily |>
@@ -318,13 +319,17 @@ for (one_date in study_dates) {
 
 ### The reproduction panel
 
-Save the panel for the reproduction models:
+Save the panel for the reproduction model:
 
 ```{r}
 trips_panel_demographic_within <- tbl(model_panel_within_con,
                                       "trips_panel_demographic")
 
 panel_reproduction_within <- trips_panel_demographic_within |>
+  # Keep the days inside our bins, from 25 to 50 degrees. This also
+  # removes the UTCI NAs, which come from areas outside the Spanish borders:
+  filter(utci >= 25,
+         utci < 50) |>
   # Group by everything but age and sex:
   group_by(
     date, id_destination, province, utci,
@@ -339,8 +344,6 @@ panel_reproduction_within <- trips_panel_demographic_within |>
 
 glimpse(panel_reproduction_within)
 ```
-
-This one is small enough to be saved as an .rds and loaded into the session memory:
 
 ```{r}
 saveRDS(panel_reproduction_within,

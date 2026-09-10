@@ -32,11 +32,6 @@ We build the final panel for model A, this model uses the full sample of trips (
 panel_reproduction <- readRDS("../data/model_panels/panel_reproduction.rds")
 
 panel_a <- panel_reproduction |>
-  # We remove UTCI NAs, which come from areas outside the Spanish borders:
-  filter(!is.na(utci)) |>
-  # And the days outside our bins, below 25 °C or above 50 °C:
-  filter(utci >= 25,
-         utci < 50) |>
   # Group by the original MITMS income:
   group_by(date, id_destination,
            province, # Needed for the cluster
@@ -120,11 +115,6 @@ panel_reproduction <- readRDS("../data/model_panels/panel_reproduction.rds")
 panel_b <- panel_reproduction |>
   # Keep only the trips that start at home:
   filter(home_trip) |>
-  # We remove UTCI NAs, which come from areas outside the Spanish borders:
-  filter(!is.na(utci)) |>
-  # And the days outside our bins, below 25 °C or above 50 °C:
-  filter(utci >= 25,
-         utci < 50) |>
   # Group by the original MITMS income:
   group_by(date, id_destination,
            province, # Needed for the cluster
@@ -202,11 +192,6 @@ panel_reproduction <- readRDS("../data/model_panels/panel_reproduction.rds")
 panel_c <- panel_reproduction |>
   # Keep only the trips that start at home:
   filter(home_trip) |>
-  # We remove UTCI NAs, which come from areas outside the Spanish borders:
-  filter(!is.na(utci)) |>
-  # And the days outside our bins, below 25 °C or above 50 °C:
-  filter(utci >= 25,
-         utci < 50) |>
   # Group by the income reconstructed from the INE data:
   group_by(date, id_destination,
            province, # Needed for the cluster
@@ -291,11 +276,6 @@ panel_reproduction <- readRDS("../data/model_panels/panel_reproduction.rds")
 panel_d <- panel_reproduction |>
   # Keep only the trips that start at home:
   filter(home_trip) |>
-  # We remove UTCI NAs, which come from areas outside the Spanish borders:
-  filter(!is.na(utci)) |>
-  # And the days outside our bins, below 25 °C or above 50 °C:
-  filter(utci >= 25,
-         utci < 50) |>
   # Group by the terciles of the INE income:
   group_by(date, id_destination,
            province, # Needed for the cluster
