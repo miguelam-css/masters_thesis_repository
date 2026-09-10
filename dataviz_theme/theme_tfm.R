@@ -3,6 +3,18 @@
 
 # To learn more about the style decisions we made, check dataviz_decisions.qmd
 
+# Font
+# ====
+
+# Our font is not available to R by default, so we download it from Google
+# fonts:
+sysfonts::font_add_google("Atkinson Hyperlegible Next",
+                          family = "Atkinson Hyperlegible Next")
+showtext::showtext_auto()
+
+# Set the DPI:
+showtext::showtext_opts(dpi = 300)
+
 # Graph theme
 # ===========
 theme_tfm <- theme_minimal(
