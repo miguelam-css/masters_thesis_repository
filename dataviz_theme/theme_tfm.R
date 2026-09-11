@@ -3,6 +3,7 @@
 
 # To learn more about the style decisions we made, check dataviz_decisions.qmd
 
+
 # Font
 # ====
 
@@ -12,11 +13,39 @@ sysfonts::font_add_google("Atkinson Hyperlegible Next",
                           family = "Atkinson Hyperlegible Next")
 showtext::showtext_auto()
 
-# Set the DPI:
-showtext::showtext_opts(dpi = 300)
+
+# Saving figures 
+# ==============
+
+# "RStudio’s Plot pane uses a resolution of only 96 DPI for speed reasons,
+# but ggsave() uses a default of 300 DPI, which is the standard quality for
+# printing. The issue with showtext is that DPI is not automatically detected",
+# and "it needs to be set manually for higher DPIs".
+# See: Ucar (2022, Oct. 5). Data Visualization | MSc CSS: 05. Themes. 
+# Retrieved from https://csslab.uc3m.es/dataviz/tutorials/05/
+
+# So we create a wrapper function around ggsave() to avoid having to that 
+# manually on every chunk (and still get correct visualization at default
+# 96 DPI):
+
+ggsave_tfm <- function(file_name, plot_to_save, ...) {
+  # To avoid the font looking too small when exporting, we raise the DPI of
+  # showtext to 300 (the default on ggsave):
+  showtext::showtext_opts(dpi = 300)
+  # Then run ggsave normally:
+  ggplot2::ggsave(file_name,
+                  plot_to_save,
+                  # We want to export to a pdf to get an easy vectorial
+                  # import in LaTeX:
+                  device = grDevices::cairo_pdf, ...)
+  # Set back to default DPI for the rest of the figures below:
+  showtext::showtext_opts(dpi = 96)
+}
+
 
 # Graph theme
 # ===========
+
 theme_tfm <- theme_minimal(
   # Base text family:
   base_family = "Atkinson Hyperlegible Next",
