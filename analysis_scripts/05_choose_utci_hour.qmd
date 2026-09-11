@@ -31,9 +31,10 @@ We load the dataset with the hourly UTCI by MITMS zone:
 ```{r}
 utci_per_mitma <- readRDS("../data/mitma_zones_utci_added/utci_per_mitma.rds")
 
-# Following Renninger and Cabrera, we drop the Canary Islands:
-utci_per_mitma <- utci_per_mitma |> 
-  filter(!str_starts(mitma_zone_id, "35|38"))
+# Following Renninger and Cabrera, we drop the Canary Islands, Ceuta, and
+# Melilla:
+utci_per_mitma <- utci_per_mitma |>
+  filter(!str_starts(mitma_zone_id, "35|38|51|52"))
 
 glimpse(utci_per_mitma)
 ```
