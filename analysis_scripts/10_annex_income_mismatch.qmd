@@ -241,6 +241,9 @@ Second, we need the trip data. We use the database we created with: `download_sc
 An exploration of the datasets allows us to answer this question, since the only income variable that makes the 10.000 and 15.000 euros thresholds sensible is mean net individual income. As shown below.
 
 ```{r}
+#| fig-width: 5.9
+#| fig-height: 4.4
+
 # Plot distributions of income for the year 2023:
 plot_income_distribution <- function(income_data, variable_name, year_chosen) {
   income_data |>
@@ -257,10 +260,18 @@ plot_income_distribution <- function(income_data, variable_name, year_chosen) {
     theme_tfm
 }
 
-plot_income_distribution(adrh, "mean_net_income_person", 2023) +
-plot_income_distribution(adrh, "mean_gross_income_person", 2023) +
-plot_income_distribution(adrh, "mean_net_income_household", 2023) +
-plot_income_distribution(adrh, "mean_gross_income_household", 2023)
+plot_income_distributions <-
+  plot_income_distribution(adrh, "mean_net_income_person", 2023) +
+  plot_income_distribution(adrh, "mean_gross_income_person", 2023) +
+  plot_income_distribution(adrh, "mean_net_income_household", 2023) +
+  plot_income_distribution(adrh, "mean_gross_income_household", 2023)
+
+plot_income_distributions
+
+# Save it:
+ggsave_tfm("../report/figures/income_variable_distributions.pdf",
+           plot_income_distributions,
+           width = 5.9, height = 4.4)
 ```
 
 The histograms above point to mean net individual income as the variable MITMS is using, since it shows the only sensible distribution given the cuts chosen (at 10,000 and 15,000 euros). To check this is the case, we contrast the the bracket MITMS reports for each zone against the bracket it would fall into according to the INE variable. We look at the MITMS zones that are formed of just one census tract (this way there is no doubt about how the census tract income should be translated into MITMS zone income). We do it for every combination of income variable and year:
