@@ -254,9 +254,8 @@ plot_1a <- ggplot(data_plot_1a,
 plot_1a
 
 # Save it:
-ggsave("../report/figures/plot1a_irr_by_income_pointrange_within.pdf",
+ggsave_tfm("../report/figures/plot1a_irr_by_income_pointrange_within.pdf",
        plot_1a,
-       device = cairo_pdf,
        width = 5.9, height = 2.6,
        create.dir = TRUE)
 ```
@@ -352,9 +351,8 @@ plot_1b <- ggplot(data_plot_1b,
 plot_1b
 
 # Save it:
-ggsave("../report/figures/plot1b_irr_by_income_pointrange_within.pdf",
+ggsave_tfm("../report/figures/plot1b_irr_by_income_pointrange_within.pdf",
        plot_1b,
-       device = cairo_pdf,
        width = 5.9, height = 4.5,
        create.dir = TRUE)
 ```
@@ -518,8 +516,7 @@ plot_2 <- ggplot(data_plot_2,
 plot_2
 
 # Save it:
-ggsave("../report/figures/plot2_irr_by_age_sex_pointrange_within.pdf", plot_2,
-       device = cairo_pdf,
+ggsave_tfm("../report/figures/plot2_irr_by_age_sex_pointrange_within.pdf", plot_2,
        width = 5.9, height = 5.5)
 ```
 
@@ -598,8 +595,7 @@ plot_3 <- ggplot(data_plot_3, aes(x = male, y = female,
 plot_3
 
 # Save it:
-ggsave("../report/figures/plot3_sex_diagonal_scatter_within.pdf", plot_3,
-       device = cairo_pdf,
+ggsave_tfm("../report/figures/plot3_sex_diagonal_scatter_within.pdf", plot_3,
        width = 5.9, height = 6)
 ```
 
@@ -667,8 +663,7 @@ plot_4 <- ggplot(data_plot_4, aes(x = utci_bins, y = gap,
 plot_4
 
 # Save it:
-ggsave("../report/figures/plot4_income_gap_by_age_lines_within.pdf", plot_4,
-       device = cairo_pdf,
+ggsave_tfm("../report/figures/plot4_income_gap_by_age_lines_within.pdf", plot_4,
        width = 5.9, height = 3)
 ```
 
