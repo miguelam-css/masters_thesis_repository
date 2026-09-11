@@ -1,0 +1,785 @@
+---
+title: "The income variable in the MITMS dataset"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+## Overview and set up
+
+The `spanishoddata` code book does not provide information about the year of the income variable in the origin-destination dataset (v2), neither does the MITMS methodological report. In addition, there is a disagreement between both sources regarding whether it is household or individual income, and none of the sources specifies whether it is net or gross income.
+
+The `spanishoddata` code book, available [here](https://ropenspain.github.io/spanishoddata/articles/v2-2022-onwards-mitma-data-codebook), reads:
+
+> The income group of individuals making the trips in n_trips. Categorized into \<10, 10-15, and \>15 (thousands of euros per year). The income for each individual is assigned based on the mean census tract income per person (data source is INE Household income distribution map).
+
+While the methodological report, available [here](https://www.transportes.gob.es/recursos_mfom/paginabasica/recursos/a3_informe_metodologico_estudio_movilidad_mitms_v8.pdf), reads:
+
+> Segmentación por perfil sociodemográfico: se segmentan los viajes de acuerdo a las siguientes características de los viajeros: \[...\] Nivel de renta media del hogar, según las siguientes franjas en miles de euros: \< 10, entre 10 y 15 y \>15.
+
+As can be seen, on the one hand there is a disagreement regarding whether the income refers to individuals (we read "the income groups of individuals" un the code book) or households (the methodological report says "*nivel de renta media del hogar*"). On the other hand, no document specifies what year the income corresponds to, or whether the income is net or gross. The natural assumption would be that it is the income of the year the trips take place, but that is not the case.
+
+The code below contrasts the data in the MITMS dataset against its declared source, the INE household income distribution map from the *Atlas de Distribución de Renta de los Hogares* (ADRH), to settle these questions. We conclude that the income variable in the MITMS dataset is mean net income per person, and that it corresponds to the 2020 ADRH data rather than the year in which the trips actually take place.
+
+The code below shows that, if we used data from the corresponding year instead of 2020 data: 991 zones would be in different income bracket in 2022, that number goes up to 1663 out of 3707 compared zones for the year 2023.
+
+The rest of this document is organized as follows: we first prepare the INE and the MITMS data; we then identify which of the INE income variables MITMS uses and which year it comes from; next we establish the geographic level at which that income is assigned; and finally we measure how many MITMS zones would change bracket if assigned the correct year instead of 2020.
+
+```{r}
+#| message: false
+#| warning: false
+
+library(spanishoddata)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(readr)
+library(explore)
+library(ggplot2)
+library(patchwork)
+library(mapSpain)
+library(sf)
+library(RColorBrewer)
+library(DBI)
+library(duckdb)
+library(purrr)
+
+# Set the spanishoddata download folder:
+spod_set_data_dir("../data/mitma")
+
+# We defined a custom theme for all the figures in the masters thesis:
+source("../dataviz_theme/theme_tfm.R")
+```
+
+## Data preprocessing
+
+### INE data
+
+#### Download INE data
+
+```{r}
+# Income:
+income_adrh_raw <- readRDS("../data/ine/income_adrh_raw.rds") |>
+  as_tibble()
+
+# Demographic variables:
+dem_adrh_raw <- readRDS("../data/ine/dem_adrh_raw.rds") |>
+  as_tibble()
+```
+
+#### Clean INE data
+
+##### Income dataset:
+
+```{r}
+# We rename the columns, fix column types, convert Spanish decimal separator
+# "," into English decimal separator ".", and convert blank spaces into NAs:
+income_adrh <- income_adrh_raw |>
+  mutate(
+    "municipality" = na_if(Municipios, ""),
+    "district" = na_if(Distritos, ""),
+    "section" = na_if(Secciones, ""),
+    "income_indicator" = Indicadores.de.renta.media,
+    "year" = Periodo,
+    "total" = parse_number(
+      Total,
+      na = c("", "."),
+      locale = locale(grouping_mark = ".", decimal_mark = ",")
+    )
+  ) |>
+  # Select to keep only the clean columns, not the raw ones:
+  select(municipality, district, section, income_indicator, year, total)
+
+# Pivot the income indicators wider to get an indicator per column:
+income_adrh <- income_adrh |> pivot_wider(
+  names_from = income_indicator,
+  values_from = total)
+
+# Rename the income indicators:
+income_adrh <- income_adrh |> rename(
+  "mean_net_income_person" = `Renta neta media por persona`,
+  "mean_net_income_household" = `Renta neta media por hogar`,
+  "mean_income_per_consumption_unit" = `Media de la renta por unidad de consumo`,
+  "median_income_per_consumption_unit" = `Mediana de la renta por unidad de consumo`,
+  "mean_gross_income_person" = `Renta bruta media por persona`,
+  "mean_gross_income_household" = `Renta bruta media por hogar`
+)
+
+# Remove raw data from the environment:
+rm(income_adrh_raw)
+
+
+# Check the result:
+glimpse(income_adrh)
+describe(income_adrh)
+```
+
+We need to keep in mind that we have a relatively small percentage of NAs in the income variables. We check what the missing values are at the section level, which is what we actually use:
+
+```{r}
+# Keep only the section-level rows (the ones we actually use):
+income_adrh |>
+  filter(!is.na(section)) |>
+  describe()
+
+# Let's check if the NA's are equally distributed across years:
+
+# And check the missing for each year:
+income_adrh |>
+  filter(!is.na(section)) |>
+  group_by(year) |>
+  summarise(
+    sections = n(),
+    # As we show later, this is the relevant variable:
+    na_net_income_per_person = sum(is.na(mean_net_income_person)), 
+    pct_net_income_per_person = 100 * mean(is.na(mean_net_income_person))
+  )
+```
+
+The missing percentage is under 2% for the years relevant to us.
+
+##### Demographic dataset:
+
+```{r}
+# We rename the columns, fix column types, convert Spanish decimal separator
+# "," into English decimal separator ".", and convert blank spaces into NAs:
+dem_adrh <- dem_adrh_raw |>
+  mutate(
+    "municipality" = na_if(Municipios, ""),
+    "district" = na_if(Distritos, ""),
+    "section" = na_if(Secciones, ""),
+    "demographic_indicator" = Indicadores.demográficos,
+    "year" = Periodo,
+    "total" = parse_number(
+      Total,
+      na = c("", "."),
+      locale = locale(grouping_mark = ".", decimal_mark = ",")
+    )
+  ) |>
+  # Select to keep only the clean columns, not the raw ones:
+  select(municipality, district, section, demographic_indicator, year, total)
+
+# Pivot the demographic indicators wider to get an indicator per column:
+dem_adrh <- dem_adrh |> pivot_wider(
+  names_from = demographic_indicator,
+  values_from = total
+)
+
+# Rename the demographic indicators:
+dem_adrh <- dem_adrh |> rename(
+  "mean_age" = `Edad media de la población`,
+  "pct_under_18" = `Porcentaje de población menor de 18 años`,
+  "pct_65_and_over" = `Porcentaje de población de 65 y más años`,
+  "mean_household_size" = `Tamaño medio del hogar`,
+  "pct_single_person_households" = `Porcentaje de hogares unipersonales`,
+  "population" = `Población`,
+  "pct_spanish_population" = `Porcentaje de población española`
+)
+
+
+# Remove raw data from the environment:
+rm(dem_adrh_raw)
+
+
+# Check the result:
+glimpse(dem_adrh)
+describe(dem_adrh)
+```
+
+Check what the NA percentage for `population` is at the section level:
+
+```{r}
+# Keep only the section-level rows (the ones we will actually use):
+dem_adrh |>
+  filter(!is.na(section)) |>
+  describe()
+
+# And check the missing for each year:
+dem_adrh |>
+  filter(!is.na(section)) |>
+  group_by(year) |>
+  summarise(
+    sections = n(),
+    na_population = sum(is.na(population)),
+    pct_na_population = 100 * mean(is.na(population))
+  )
+```
+
+The NA percentage in the population variable is under 2% in our study period.
+
+##### Join tibbles with geographic data
+
+Join both tibbles (we need the population of each section from the demographic dataset, which is not available in the income dataset).
+
+```{r}
+# Join the tibbles:
+adrh <- dem_adrh |>
+  # We keep just the join key columns and the population variable we need:
+  select(municipality, district, section, year, population) |> 
+  # And join:
+  left_join(
+    income_adrh,
+    by = join_by(municipality, district, section, year),
+    keep = FALSE
+  )
+```
+
+### MITMS data
+
+From MITMS we need two things. First, the the district zones, with the census tracts included in each of them. We download it:
+
+```{r}
+# Only downloads the first time, after that takes it from the folder we defined
+# in the first chunk of the .qmd
+od_districts <- spod_get_zones("dist", ver = 2)
+```
+
+Second, we need the trip data. We use the database we created with: `download_scripts/mitma_download_script.qmd` and aggregated from hours to days in `analysis_scripts/02_aggregate_trips_to_days.qmd`, meaning we will connect to that duckDB database when needed.
+
+## Individual or household? Net or gross? Year?
+
+An exploration of the datasets allows us to answer this question, since the only income variable that makes the 10.000 and 15.000 euros thresholds sensible is mean net individual income. As shown below.
+
+```{r}
+# Plot distributions of income for the year 2023:
+plot_income_distribution <- function(income_data, variable_name, year_chosen) {
+  income_data |>
+    # Select only sections and for the chosen year:
+    filter(!is.na(section), year == year_chosen) |>
+    ggplot(aes(x = .data[[variable_name]])) + # We'll pass it in quotes
+    # A single-colour plot: the data in colour, the reference lines in gray,
+    # per the palette decisions in dataviz_theme/dataviz_decisions.qmd:
+    geom_histogram(fill = "#8DA0CB", bins = 50) +
+    # Add vertical lines at the 10000 and 15000 thresholds used by MITMS:
+    geom_vline(xintercept = 10000, color = "grey30", linetype = "dashed") +
+    geom_vline(xintercept = 15000, color = "grey30", linetype = "dashed") +
+    labs(x = variable_name, y = "Number of sections") +
+    theme_tfm
+}
+
+plot_income_distribution(adrh, "mean_net_income_person", 2023) +
+plot_income_distribution(adrh, "mean_gross_income_person", 2023) +
+plot_income_distribution(adrh, "mean_net_income_household", 2023) +
+plot_income_distribution(adrh, "mean_gross_income_household", 2023)
+```
+
+The histograms above point to mean net individual income as the variable MITMS is using, since it shows the only sensible distribution given the cuts chosen (at 10,000 and 15,000 euros). To check this is the case, we contrast the the bracket MITMS reports for each zone against the bracket it would fall into according to the INE variable. We look at the MITMS zones that are formed of just one census tract (this way there is no doubt about how the census tract income should be translated into MITMS zone income). We do it for every combination of income variable and year:
+
+We first identify those single census tract zones:
+
+```{r}
+single_tract_zones <- od_districts |>
+  st_drop_geometry() |>
+  # MITMS separates tract codes with ";", if there is no ";" it means there is
+  # a single tract:
+  filter(str_count(census_sections, ";") == 0) |>
+  # Some zones have no census tracts, MITMS writes those as "NA", we filter
+  # them out:
+  filter(census_sections != "NA") |>
+  select(id, census_sections)
+```
+
+And we get the bracket MITMS reports for those zones, aggregated over the whole panel of trips:
+
+```{r}
+# Connect to the duckDB
+mitma_daily_con <- dbConnect(
+  duckdb(),
+  dbdir = "../data/mitma_daily/mitma_daily.duckdb",
+  read_only = TRUE # We won't edit the database in this script
+)
+
+# We set the maximum CPU threads and RAM usage; these values should be
+# adapted to your machine:
+dbExecute(mitma_daily_con, "SET memory_limit = '128GB'")
+dbExecute(mitma_daily_con, "SET threads = 24")
+
+mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
+
+# Get the bracket reported by MITMS:
+single_tract_trips <- mitma_daily |>
+  # Keep the trips with one of their two ends at the traveller's home, using
+  # the home_trip/home_id columns already computed when the panel was built:
+  filter(home_trip) |>
+  group_by(home_id, income) |>
+  summarise(trips = sum(n_trips, na.rm = TRUE), .groups = "drop") |>
+  collect() |>
+  rename("residence_zone_id" = home_id) |>
+  mutate("mitma_bracket" = as.character(income)) |>
+  # Keep only the single tract zones:
+  semi_join(single_tract_zones, by = c("residence_zone_id" = "id")) |>
+  # A zone can report trips in more than one bracket, so we keep its main one
+  # (the bracket with the most trips). This way each zone contributes a single
+  # row to the comparison below:
+  group_by(residence_zone_id) |>
+  slice_max(trips, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+dbDisconnect(mitma_daily_con, shutdown = TRUE)
+```
+
+We now compare, for every combination of candidate income variable and ADRH year, the bracket according to INE against the bracket according to the MITMS dataset:
+
+```{r}
+# Instead of testing one variable at a time, we make the variable a column:
+# every census tract gets one row per candidate income variable and year.
+census_tract_bracket <- adrh |>
+  # Keep the census tract rows:
+  filter(!is.na(section)) |>
+  # We pivot the variable name longer so that they become values of a "variable"
+  # column, this way the cuts are applied to all of them at the same time:
+  pivot_longer(
+    cols = c(mean_net_income_person, mean_gross_income_person,
+             mean_net_income_household, mean_gross_income_household),
+    names_to = "income_variable",
+    values_to = "income_variable_euros") |>
+  # The INE section column carries the code and the name, we keep the
+  # 10 digits of the code, which is what matches the MITMS tract codes:
+  mutate("section_code" = str_extract(section, "^\\d{10}")) |>
+  # And we cut the candidate variable at the same thresholds MITMS uses:
+  mutate(
+    "ine_bracket" = case_when(
+      income_variable_euros > 15000 ~ ">15",
+      income_variable_euros >= 10000 ~ "10-15",
+      income_variable_euros < 10000 ~ "<10")) |>
+  select(section_code, year, income_variable, ine_bracket)
+
+# Now the two brackets side by side, one row per zone, variable and year:
+mismatches_grid <- single_tract_zones |>
+  # Join the INE bracket:
+  left_join(census_tract_bracket, by = c("census_sections" = "section_code")) |>
+  # Join the MITMS bracket:
+  left_join(single_tract_trips, by = c("id" = "residence_zone_id")) |>
+  # The zones with no INE income, and the ones with no trips in the panel and
+  # therefore no bracket in MITMS, cannot be compared, we drop them:
+  filter(!is.na(ine_bracket), !is.na(mitma_bracket)) |>
+  # Summarise to get one line per combination of income variable and year:
+  group_by(income_variable, year) |>
+  summarise(
+    "zones_compared" = n(),
+    "mismatches" = sum(ine_bracket != mitma_bracket),
+    .groups = "drop")
+
+mismatches_grid |> arrange(mismatches)
+```
+
+The combination with the fewest mismatches (just 1) is mean net income per person, for the year 2020. An extra argument for why 2020 year income data is being used is how as the years get further from 2020, the number of mismatches increases:
+
+```{r}
+# Filter for the mean net income per person variable:
+data_mismatches <- mismatches_grid |>
+  filter(income_variable == "mean_net_income_person")
+```
+
+```{r}
+#| fig-width: 5.9
+#| fig-height: 4.4
+
+# And plot a lineplot:
+plot_mismatches <- ggplot(data_mismatches, aes(x = year, y = mismatches)) +
+  geom_line(colour = "grey30") +
+  geom_point(colour = "black") +
+  # One break per year:
+  scale_x_continuous(breaks = sort(unique(mismatches_grid$year))) +
+  labs(x = NULL, y = "Single section zones in a different bracket in INE and MITMS") +
+  theme_tfm
+
+plot_mismatches
+
+# Save it:
+ggsave_tfm("../report/figures/bracket_mismatches_by_year_line.pdf",
+       plot_mismatches,
+       width = 5.9, height = 4.4)
+```
+
+## Is income assigned at the section or the MITMS zone level?
+
+Having settled that MITMS uses mean net income per person from the 2020 ADRH data, we test whether that income is assigned at the census section level, as `spanishoddata`'s documentation states, or at the coarser MITMS zone level. The two hypotheses only make different predictions on zones made of several census tracts, so this is where we test them.
+
+### One zone as an example
+
+Before testing this on every zone, we show a single example to convey what we are talking about. We choose the zone `2807920`, the district of San Blas-Canillejas, in Madrid, which is made up of census tracts with varying incomes, covering all three income brackets. If income were assigned census tract by census tract, this zone should show trips in every bracket, approximately in proportion to the population living in each of them. We take the number of trips that start at the traveler's home in that zone, on a single working day (Thursday 1st of July 2023), and the income bracket MITMS reports for them. We do this for just one day so that the intepretation is completely straightforward.
+
+```{r}
+# Get the trips of the chosen day:
+od_data_20230601 <- spod_get(
+  type  = "od",
+  zones = "districts",
+  dates = "2023-06-01")
+
+# Set a vector with the labels so that both figures share the same axis:
+income_levels <- c("<10", "10-15", ">15")
+
+sanblas_trips <- od_data_20230601 |>
+  # The trips leaving San Blas-Canillejas from the traveller's home, so that 
+  # we now the income variable corresponds to their home census tract:
+  filter(id_origin == "2807920", activity_origin == "home") |>
+  rename("income_bracket" = income) |>
+  group_by(income_bracket) |>
+  summarise(trips = sum(n_trips, na.rm = TRUE)) |>
+  collect() |>
+  # As a factor, so that a bracket with no trips still gets a place on the
+  # axis, which is the whole point of the figure:
+  mutate("income_bracket" = factor(income_bracket, levels = income_levels))
+
+sanblas_trips
+```
+
+And get the population corresponding to each income bracket in this zone:
+
+```{r}
+# To know the population in each income bracket, we first need to get
+# the census section code that fall in each income bracket:
+sanblas_brackets <- adrh |>
+  # The census sections of San Blas-Canillejas share the first seven digits
+  # with the MITMS zone, we filter for those:
+  filter(str_starts(section, "2807920"), year == 2020) |>
+  # Each census tract goes into the bracket its income falls into, with the
+  # same cuts MITMS uses:
+  mutate(
+    "income_bracket" = case_when(
+      mean_net_income_person > 15000 ~ ">15",
+      mean_net_income_person >= 10000 ~ "10-15",
+      mean_net_income_person < 10000 ~ "<10")) |>
+  # The census tracts with no income data cannot be placed in any bracket, so
+  # we drop them:
+  filter(!is.na(income_bracket)) |>
+  # We will join by census section code, so we extract it:
+  mutate("section_code" = str_extract(section, "^\\d{10}")) |>
+  select(section_code, income_bracket)
+
+# Now we can get the population of each census section:
+sanblas_population <- adrh |>
+  filter(str_starts(section, "2807920"), year == 2023) |>
+  mutate("section_code" = str_extract(section, "^\\d{10}")) |>
+  select(section_code, population) |>
+  # Give each census tract the bracket MITMS would have given it:
+  left_join(sanblas_brackets, by = "section_code") |>
+  # The census sections with no 2020 income have no bracket:
+  filter(!is.na(income_bracket)) |>
+  # As a factor, so that the brackets keep their order and not the
+  # alphabetical one:
+  mutate("income_bracket" = factor(income_bracket, levels = income_levels)) |>
+  group_by(income_bracket) |>
+  summarise(
+    sections = n(),
+    sections_without_population = sum(is.na(population)),
+    population = sum(population, na.rm = TRUE))
+```
+
+Plot trips and population of each income bracket side by side:
+
+```{r}
+# The trips MITMS reports for the zone, by the bracket it gives them:
+plot_trips <- ggplot(sanblas_trips, aes(x = income_bracket, y = trips)) +
+  # Blue for MITMS and orange for INE, as everywhere else in this document:
+  geom_col(fill = "#8DA0CB") +
+  # Keep the empty brackets on the axis, they are the point of the figure:
+  scale_x_discrete(drop = FALSE) +
+  labs(
+    x = NULL, y = "Trips",
+    title = "MITMS: trips",
+    subtitle = "Trips starting at home, 2023-06-01") +
+  theme_tfm
+
+# And the people living in the zone, by the bracket of their census section:
+plot_people <- ggplot(sanblas_population, aes(x = income_bracket, y = population)) +
+  geom_col(fill = "#FC8D62") +
+  scale_x_discrete(drop = FALSE) +
+  labs(
+    x = NULL, y = "People",
+    title = "INE: population",
+    subtitle = "Population in 2023") +
+  theme_tfm
+
+# patchwork puts the two figures side by side:
+plot_trips + plot_people
+```
+
+This plot makes it clear that income is not being assigned at the census section level as the documentation states.
+
+### Test on every zone
+
+We now repeat that comparison over the whole dataset. We first get a row for census tract in the MITMS dataset:
+
+```{r}
+zone_tracts <- od_districts |>
+  # We only need the codes, not the polygons:
+  st_drop_geometry() |>
+  filter(!is.na(census_sections)) |>
+  select(id, census_sections) |>
+  # MITMS lists the census sections of a zone in a single string separated by
+  # ";", we split it into one row per section:
+  separate_longer_delim(census_sections, ";") |>
+  # Remove the spaces:
+  mutate("census_sections" = str_trim(census_sections))
+```
+
+We compute the population weighted mean income of each MITMS zone from its census tracts (2020 ADRH data), and the bracket that mean falls in:
+
+```{r}
+# The income and the population of every census section, for the year 2020:
+
+# Get the code of every section and keep income and population:
+section_income_2020 <- adrh |>
+  filter(!is.na(section), year == 2020) |>
+  mutate("section_code" = str_extract(section, "^\\d{10}")) |>
+  select(section_code, population, mean_net_income_person)
+
+# Add income variable to the MITMS sections:
+zone_section_income_2020 <- zone_tracts |>
+  left_join(section_income_2020, by = c("census_sections" = "section_code")) |>
+  # A section with no income or no population cannot enter a weighted mean:
+  filter(!is.na(mean_net_income_person), !is.na(population), population > 0)
+
+# Compute the weighted mean and convert into brackets:
+zone_income <- zone_section_income_2020 |>
+  # The income of a zone is the mean of its sections weighted by how many
+  # people live in each of them:
+  group_by(id) |>
+  summarise(
+    "zone_income" = sum(mean_net_income_person * population) / sum(population),
+    .groups = "drop") |>
+  # And that mean goes into a bracket, with the same cuts as before:
+  mutate(
+    "ine_zone_bracket" = case_when(
+      zone_income > 15000 ~ ">15",
+      zone_income >= 10000 ~ "10-15",
+      zone_income < 10000 ~ "<10"))
+```
+
+And get how many trips MITMS actually reports for each zone in each bracket:
+
+```{r}
+# Connect to the DuckDB dataset:
+mitma_daily_con <- dbConnect(
+  duckdb(),
+  dbdir = "../data/mitma_daily/mitma_daily.duckdb",
+  read_only = TRUE 
+)
+
+# Set the maximum CPU threads and RAM usage; these values should be
+# adapted to your machine:
+dbExecute(mitma_daily_con, "SET memory_limit = '128GB'")
+dbExecute(mitma_daily_con, "SET threads = 24")
+
+mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
+
+# Compute trips in each zone by income bracket (only trips with origin or 
+# destination home):
+trips_by_zone_bracket <- mitma_daily |>
+  # We keep the trips with one of their two ends at "home", which are the ones
+  # we can assign INE's income to
+  filter(home_trip) |>
+  group_by(home_id, income) |>
+  summarise(trips = sum(n_trips, na.rm = TRUE),
+            .groups = "drop") |>
+  # We now have just one row per zone and bracket, so we can collect into
+  # the session memory:
+  collect() |>
+  rename("residence_zone_id" = home_id) |>
+  # DuckDB gives the bracket as a factor, we want it as character to compare it:
+  mutate("mitma_bracket" = as.character(income)) |>
+  select(residence_zone_id, mitma_bracket, trips)
+
+dbDisconnect(mitma_daily_con, shutdown = TRUE)
+```
+
+To test how the assignment is made, we need to keep only those zones that have more than census tract, and in which all the census tracts do not fall in the same income bracket (zones with just one tract or all tracts in the same bracket would be assigned the same income no matter if assigned at the zone level or the census tract level). For each of them we compute the share of its population living in sections of each bracket, which is approximately what an assignment at the census tract level would predict for the trips:
+
+```{r}
+# The bracket every census section falls in, with the same cuts:
+section_brackets <- zone_section_income_2020 |>
+  mutate(
+    "ine_section_bracket" = case_when(
+      mean_net_income_person > 15000 ~ ">15",
+      mean_net_income_person >= 10000 ~ "10-15",
+      mean_net_income_person < 10000 ~ "<10"))
+
+# We only keep the zones that allow us to check at what level income is being
+# assigned, and we drop the rest in two steps.
+section_brackets <- section_brackets |>
+  group_by(id) |>
+  filter(
+    # Filter out zone with just one census section:
+    n() > 1,
+    # ANd zones whose sections fall all in the same bracket:
+    n_distinct(ine_section_bracket) > 1) |>
+  ungroup()
+
+# The share of the zone's population that lives in sections of each bracket,
+# which is approximately what a census tract level assignment should predict
+# for the trips:
+population_share <- section_brackets |>
+  group_by(id, ine_section_bracket) |>
+  summarise("bracket_population" = sum(population), .groups = "drop") |>
+  group_by(id) |>
+  mutate("population_share" = bracket_population / sum(bracket_population)) |>
+  ungroup()
+```
+
+If trips were assigned at the section level, zones with more than one bracket among their sections should have trips across all their income brackets (at approximately the same share as population in those brackets). Instead, almost all zones concentrate almost all their trips in a single bracket:
+
+```{r}
+# The share of the zone's trips MITMS puts in each bracket:
+trips_share <- trips_by_zone_bracket |>
+  semi_join(population_share, by = c("residence_zone_id" = "id")) |>
+  group_by(residence_zone_id) |>
+  mutate("trips_share" = trips / sum(trips)) |>
+  ungroup()
+
+# Finally, create a tibble with percentages of trips and percentage of 
+# population by income bracket. We do a full join because we want to keep
+# both bracket that have population but not trips, or that have trips but
+# not population (which should not exist, but just in case):
+share_comparison <- population_share |>
+  full_join(trips_share,
+            by = c("id" = "residence_zone_id",
+                   "ine_section_bracket" = "mitma_bracket")) |>
+  mutate("population_share" = replace_na(population_share, 0),
+         "trips_share" = replace_na(trips_share, 0))
+```
+
+And plot the result in a scatterplot:
+
+```{r}
+#| fig-width: 5
+#| fig-height: 5
+
+plot_share_comparison <- ggplot(share_comparison,
+                                aes(x = population_share, y = trips_share)) +
+  # The line the points would sit on if income were assigned section by
+  # section: trip and population shares by bracket should be similar:
+  geom_abline(slope = 1, intercept = 0,
+              colour = "grey50", linetype = "dashed") +
+
+  geom_point(colour = "#8DA0CB", alpha = 0.03, size = 1) +
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::percent) +
+  # The two axes are the same magnitude, so they get the same length:
+  coord_fixed() +
+  labs(x = "Zone share of population by income bracket (INE)",
+       y = "Zone share of trips by income bracket (MITMS)") +
+  theme_tfm
+
+plot_share_comparison
+
+# Save it:
+ggsave_tfm("../report/figures/income_assignment_level_scatter.pdf",
+       plot_share_comparison,
+       width = 5, height = 5)
+```
+
+Income is clearly not assigned at the census tract level, otherwise the dots would approximately follow the diagonal, and we see huge concentrations of dots at 0 and 100%. However, the plot also reveals it is not being assigned at the zone level either, since otherwise all dots should be at 0% or 100%.
+
+## Dimension of the mismatch
+
+Having established that MITMS uses 2020 ADRH data for trips that happen in 2022 and 2023 (a two to three year mismatch), we measure how big that mismatch is: how many MITMS zones would fall in a different income bracket if the 2023 data had been used instead of 2020.
+
+```{r}
+# The income and population of each census section, for the year MITMS uses
+# and the two years the trips happen in:
+section_income_by_year <- adrh |>
+  filter(!is.na(section)) |>
+  filter(year %in% c(2020, 2022, 2023)) |>
+  mutate("section_code" = str_extract(section, "^\\d{10}")) |>
+  select(section_code, year, population, mean_net_income_person)
+
+# Join to the census sections of each MITMS zone (each section now appears
+# once per year):
+zone_section_income_by_year <- zone_tracts |>
+  left_join(section_income_by_year, by = c("census_sections" = "section_code")) |>
+  # A section with no income or no population cannot enter a weighted mean:
+  filter(!is.na(mean_net_income_person), !is.na(population), population > 0)
+
+# The same population weighted zone income as before, now one per zone and year:
+zone_income_by_year <- zone_section_income_by_year |>
+  group_by(id, year) |>
+  summarise(
+    "zone_income" = sum(mean_net_income_person * population) / sum(population),
+    .groups = "drop") |>
+  mutate("year" = factor(year))
+```
+
+Plot the distribution for each year:
+
+```{r}
+#| fig-width: 5.9
+#| fig-height: 2.5
+
+plot_income_by_year <- ggplot(zone_income_by_year,
+                              aes(x = zone_income, fill = year)) +
+  geom_density(alpha = 0.5, colour = NA) +
+  # The two cuts MITMS uses:
+  geom_vline(xintercept = c(10000, 15000), linetype = "dotted") +
+  scale_x_continuous(labels = scales::label_number(scale = 1e-3, suffix = "k")) +
+  # The third year takes the green of Set2, the palette the other two come
+  # from:
+  scale_fill_manual(values = c("2020" = "#8DA0CB",
+                               "2022" = "#66C2A5",
+                               "2023" = "#FC8D62")) +
+  labs(
+    x = "Mean net income per person of the MITMS zone (from INE data)",
+    y = "Density",
+    fill = "Year") +
+  theme_tfm
+
+plot_income_by_year
+
+# Save it:
+ggsave_tfm("../report/figures/zone_income_by_year_density.pdf",
+       plot_income_by_year,
+       width = 5.9, height = 2.5)
+```
+
+Find exactly how many zones fall in each bracket each year:
+
+```{r}
+# How many zones fall in each bracket each year:
+zones_per_bracket <- zone_income_by_year |>
+  mutate(
+    "ine_zone_bracket" = case_when(
+      zone_income > 15000 ~ ">15",
+      zone_income >= 10000 ~ "10-15",
+      zone_income < 10000 ~ "<10")) |>
+  count(year, ine_zone_bracket) |>
+  pivot_wider(names_from = ine_zone_bracket, values_from = n, values_fill = 0) |>
+  relocate("year", "<10", "10-15", ">15")
+
+zones_per_bracket
+```
+
+And how many zones change bracket:
+
+```{r}
+# How many zones are not in the same bracket as they were in 2020:
+zone_bracket_change <- zone_income_by_year |>
+  mutate(
+    "ine_zone_bracket" = case_when(
+      zone_income > 15000 ~ ">15",
+      zone_income >= 10000 ~ "10-15",
+      zone_income < 10000 ~ "<10")) |>
+  select(id, year, ine_zone_bracket) |>
+  pivot_wider(names_from = year, values_from = ine_zone_bracket, names_prefix = "bracket_") |>
+  # Only the zones with income data in the three years can be compared:
+  filter(!is.na(bracket_2020), !is.na(bracket_2022), !is.na(bracket_2023))
+
+# One count per year of trips, against the 2020 data MITMS actually uses:
+zone_bracket_change |>
+  summarise(
+    "zones_compared" = n(),
+    "changed_in_2022" = sum(bracket_2020 != bracket_2022),
+    "changed_in_2023" = sum(bracket_2020 != bracket_2023))
+```
+
+991 MITMS zones fall in a different income bracket in 2022 compared to 2020, that number rises up to 1663 for the year 2023.
+
+## Conclusion
+
+The `income` variable of the MITMS dataset is documented in two different places, which disagree between them and don't specify important information. The `spanishoddata` code states the `income` variables is mean income per person, and the MITMS methodological report states it is the mean income of the household. Neither document says whether it is net or gross income, and neither document reports which year it comes from. Our analysis suggests that:
+
+- It is net income per person. Of the variables available in the ADRH tables, it is the only one that predicts the bracket MITMS reports for the zones where there is no ambiguity, those made of a single census tract.
+
+- It comes from the **2020 ADRH**, for trips that happen in 2022 and 2023. While it may seem like this is not very important since income doesn't change at rapid rates, given there are only two cuts, the distribution changes drastically: 991 zones would fall in a different bracket with the 2022 data and 1663 with the 2023 data, out of 3707 compared.
+
+- Finally, and while this is outside the scope of our work, we found that it is likely not assigned at the census tract level, as the code book states. If it were, a zone that includes census tracts that fall in different brackets would report trips in all of them, approximately in proportion to the population in them. And that is not what we find in the data. We also find, however, that is could not have been assigned at the zone level. We can not establish what the consignment mechanism was, but it seems like it not what the documentation reports.
