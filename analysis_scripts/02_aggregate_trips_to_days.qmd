@@ -124,7 +124,7 @@ mitma_data |>
 
 ## Writing the duckDB database
 
-As can be seen below, `mitma_daily` contains over two billion (two thousand million) rows, thus cannot be loaded into R, we will be working with lazy queries as we've done so far. But we will save the final dataset in order to avoid repeating the preprocessing at every step from now on.
+As can be seen below, `mitma_daily` contains over two billion (two thousand million) rows, thus cannot be loaded into R, we will be working with lazy queries as we've done so far, but save the final dataset in order to avoid repeating the preprocessing at every step from now on.
 
 ```{r}
 # Count rows:
