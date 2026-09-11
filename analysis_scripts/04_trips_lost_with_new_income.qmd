@@ -5,7 +5,9 @@ format: html
 editor: visual
 ---
 
-Since we can only assing the INE income variable to trips that have either origin or destination at "home", we lose every other trip. In this document we measure how many trips that is, and whether the loss spreads evenly across demographic variables, activities and zones.
+## Overview and setup
+
+Since we can only assign the INE income variable to the trips that have either origin or destination at "home", we lose every other trip. In this document we measure how many trips that is, and whether the loss spreads evenly across demographic variables, activities and zones.
 
 ```{r}
 #| message: false
@@ -45,16 +47,23 @@ dbExecute(mitma_daily_con, "SET threads = 24")
 mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
 ```
 
-## Drop Canary Islands:
+## Drop Canary Islands, Ceuta, and Melilla
 
-Following Renninger and Cabrera (2026), we don't use data from the Canary Islands, so we drop it.
+Renninger and Cabrera (2026, p. 10) describe their geographical area of study as "mainland Spain and the Balearic Islands", following this description, we filter out the Canary Islands, Ceuta, and Melilla.
 
 ```{r}
-mitma_daily <- mitma_daily |> 
-  filter(!str_starts(id_destination, "35|38"))
+# The first two digits of a district id are its province:
+# 35: Las Palmas
+# 38: Santa Cruz de Tenerife
+# 51: Ceuta
+# 52: Melilla
+
+mitma_daily <- mitma_daily |>
+  filter(!str_starts(id_destination, "35|38|51|52"))
+
 ```
 
-## How many trips have home as origin or destination
+## Count trips with home as origin or destination
 
 ```{r}
 mitma_daily |>
@@ -67,7 +76,7 @@ mitma_daily |>
   mutate("home_trips_share" = total_home_trips / total_trips)
 ```
 
-Almost 75% of the trips have home as their origin or as their destination. While losing 25% of the trips is not ideal (specially since we are not losing them at random), having the possibility of assigning the correct income from INE to three foruths of the trips is good news.
+74.41% of the trips have home as their origin or as their destination. While losing 25.59% of the trips is not ideal (specially since we are not losing them at random), having the possibility of assigning the correct income from INE to three fourths of the trips is good news.
 
 ## Bias of the trips kept
 
@@ -92,8 +101,8 @@ trips_grouped <- mitma_daily |>
 home_trips_share_by_variable <- function(variable) {
   trips_grouped |>
     # Group by the variable of interest, embracing it so that the
-    # function looks inside variable for the column name
-    # ESTO LO HE COGIDO DE R FOR DATA SCINCE SECTION 25.3
+    # function looks inside variable for the column name (see
+    # R4DS 25.3 here: https://r4ds.hadley.nz/functions.html#)
     group_by({{variable}}) |>
     # Aggregate:
     summarise(
@@ -140,7 +149,7 @@ ggplot(home_trips_shares,
        aes(x = home_trips_share, y = categories)) +
   
   # The lollipops:
-  # Lollipo stick:
+  # Lollipop stick:
   geom_segment(aes(x = 0, xend = home_trips_share, yend = categories),
                colour = "grey50", linewidth = 0.3) +
   
@@ -198,7 +207,7 @@ ggplot(home_trips_shares,
 
 ### Geographic bias
 
-Finally, we plot a map to check whether there is geographical bias in the missing values. We will plot two versions: the first one with the total amount of trips with origin in each district, the second one with total amount of trips with destination in each district. This way, we are not blind to biases affecting certain directions of travel.
+Finally, we plot a map to check whether there is geographical bias in the missing values. We plot two versions: the first one with the total amount of trips with origin in each district, the second one with total amount of trips with destination in each district. This way, we are not blind to biases affecting certain directions of travel.
 
 We first load the MITMS district geometries:
 
@@ -206,9 +215,9 @@ We first load the MITMS district geometries:
 # Load the file:
 mitma_districts <- readRDS("../data/mitma_geometries_moved_can.rds")
 
-# And drop the Canary Islands:
-mitma_districts <- mitma_districts |> 
-  filter(!str_starts(id, "35|38"))
+# And drop the same provinces we dropped from the trips:
+mitma_districts <- mitma_districts |>
+  filter(!str_starts(id, "35|38|51|52"))
 ```
 
 We aggregate the trips from the duckDB grouping by `id_origin` and `id_destination`:
@@ -261,7 +270,7 @@ min(total_trips_origin$total_trips)
 min(total_trips_destination$total_trips)
 ```
 
-The smallest values are still in the thousands. We now join the geometries and plot one map per direction:
+\[ACTUALIZAR CUANDO LO CORRA EN EL SERVER\] The smallest values are still in the thousands. We now join the geometries and plot one map per direction:
 
 ```{r}
 # We start by defining the scale:
@@ -297,9 +306,3 @@ We close the connection to the database:
 ```{r}
 dbDisconnect(mitma_daily_con, shutdown = TRUE)
 ```
-
-## NOTA:
-
-### Hourly bias (debería sacarlo)
-
-### Monthly bias (debería sacarlo)
