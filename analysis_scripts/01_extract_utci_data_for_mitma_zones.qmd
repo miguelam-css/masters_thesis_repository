@@ -7,7 +7,7 @@ editor: visual
 
 ## Overview and set up
 
-In this document we extract the UTCI of each MITMS zone for each hour in our study period. Since some zones fall in areas covered by two cells of the UTCI raster, we compute the weighted UTCI based on the area of the district that falls within each cell. We save the result in an .rds file.
+In this document we extract the UTCI of each MITMS zone for each hour in our study period. Since some zones fall in areas covered by two cells of the UTCI raster, we compute the weighted UTCI based on the area of the district that falls within each cell, and the save the result in an .rds file.
 
 ```{r}
 #| message: false
@@ -73,7 +73,7 @@ districts <- mitma_districts |>
   filter(str_starts(id, "\\d"))
 ```
 
-Since, in order to make a lighter download, we downloaded the UTCI data separately for the Canary Islands and the Peninsula and Balearic Islands, we will need to merge both rasters (sets of rasters). We start by creating two vectors with the file names of the rasters for both areas, in order to later merge them:
+Since, in order to make a lighter download, we downloaded the UTCI data separately for the Canary Islands and the Peninsula and Balearic Islands, we need to merge both rasters (sets of rasters). We start by creating two vectors with the file names of the rasters for both areas, in order to later merge them:
 
 ```{r}
 # Peninsula and Balearic Islands file names:
@@ -89,7 +89,7 @@ canary_files <- list.files(
   )
 ```
 
-For each UTCI file (each file represents a day) we will extract the mean UTCI of every district, for each of the 24 hours. Following Lovelace et al., we use the `exactextractr`package, which “offers a significantly faster alternative for extracting pixel values through the `exact_extract()` function”; this function “always computes the coverage fraction of the polygon in each cell”. ([Lovelace et al., 2019, Section 6.3](https://r.geocompx.org/raster-vector.html)). In other words, when calculating the mean UTCI for each district, it weights every raster cell by the fraction of its area that falls inside the the district's polygon.
+For each UTCI file (each file represents a day) we extract the mean UTCI of every district, for each of the 24 hours. Following Lovelace et al., we use the `exactextractr`package, which “offers a significantly faster alternative for extracting pixel values through the `exact_extract()` function”; this function “always computes the coverage fraction of the polygon in each cell”. ([Lovelace et al., 2019, Section 6.3](https://r.geocompx.org/raster-vector.html)). In other words, when calculating the mean UTCI for each district, it weights every raster cell by the fraction of its area that falls inside the the district's polygon.
 
 ```{r}
 # We define a function that we will run once per UTCI file (that is, per day)
@@ -124,7 +124,7 @@ extract_utci_per_mitma <- function(peninsula_file, canary_file, districts) {
 }
 ```
 
-And we run the extraction:
+And run the extraction:
 
 ```{r}
 # With map2() we take both vectors (peninsula_files and canary_files) and
