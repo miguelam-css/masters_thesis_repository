@@ -446,4 +446,5 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
 }
 ```
 
-These models fit worse than the same models on the flows within districts panel: model B reaches a pseudo R² of 0.709 here against 0.906 there, and model C 0.741 against 0.979. We read that as evidence that the flows within districts panel is the sample Renninger and Cabrera (2026) use, so it is the one we report, and the intersectionality model is only estimated on it, in `07b_estimate_the_models_within_district.qmd`.
+These models perform worse than the models using the within district trips panel, results from the models in script `7b_estimate_the_models_within_trips.qmd` are closer to Renninger and Cabrera (2026), which provides further evidence that the within district trips panel was the panel they used.
+
