@@ -25,155 +25,6 @@ library(kableExtra)
 source("../dataviz_theme/theme_tfm.R")
 ```
 
-## Descriptive statistics (within trips)
-
-We build a table equivalent to table S1 in the Supplementary Material of Renninger and Cabrera (2026), so that both can be read side by side.
-
-The panels the models use only keep the district-days between 25 and 50 degrees, so the counts here come from the intermediate table `06_build_panels_for_models.qmd` writes, which still holds every district-day of the period.
-
-```{r}
-#| message: false
-
-model_panel_within_con <- dbConnect(
-  duckdb(),
-  dbdir = "../data/model_panels/model_panel_within.duckdb",
-  read_only = TRUE # We won't edit the database in this script
-  )
-
-# We set the maximum CPU threads and RAM usage, we are working on a powerful
-# computer, these values should be adapted to your machine:
-dbExecute(model_panel_within_con, "SET memory_limit = '128GB'")
-dbExecute(model_panel_within_con, "SET threads = 24")
-
-# Load the lazy table:
-trips_panel_demographic <- tbl(model_panel_within_con,
-                               "trips_panel_demographic")
-```
-
-Each of their three panels in Renninger and Cabrera (2026) adds up to 100% on its own, and the totals differ, meaning they drop the NA values and compute the shares over the trips that are left. We do the same.
-
-Define a funciton to the same operation to the three strata:
-
-```{r}
-descriptives_by_stratum <- function(stratum) {
-
-  # The same subset for the three queries below: the districts outside Spain
-  # have no UTCI, NAs are dropped. The stratum is embraced so that the
-  # function looks inside it for the column name (see R4DS 25.3 here:
-  # https://r4ds.hadley.nz/functions.html#data-frame-functions), and renamed
-  # so that the three variables can be put together later with bind_rows():
-  stratum_panel <- trips_panel_demographic |>
-    filter(!is.na(utci), !is.na({{stratum}})) |>
-    rename("stratum" = {{stratum}})
-
-  # Sum the trips by stratum and activity at destination:
-  stratum_trips <- stratum_panel |>
-    group_by(stratum, activity_destination) |>
-    summarise("trips" = sum(n_trips), .groups = "drop") |>
-    collect()
-
-  # Observations in our sample are district-day cells, so we count the distinct
-  # date and district each group appears in:
-  stratum_observations <- stratum_panel |>
-    distinct(stratum, activity_destination, date, id_destination) |>
-    count(stratum, activity_destination, name = "observations") |>
-    collect()
-
-  # And count distinct districts, the last column in their table S1:
-  stratum_districts <- stratum_panel |>
-    distinct(stratum, activity_destination, id_destination) |>
-    count(stratum, activity_destination, name = "districts") |>
-    collect()
-
-  # Put the three together:
-  stratum_trips |>
-    left_join(stratum_observations,
-              by = join_by(stratum, activity_destination)) |>
-    left_join(stratum_districts,
-              by = join_by(stratum, activity_destination)) |>
-    mutate(
-      # Add the trip share (calculated inside each stratum)
-      "share" = 100 * trips / sum(trips),
-      # And the stratum name:
-      "stratum" = as.character(stratum))
-}
-```
-
-Apply the function to the three strata and bind them together in a single table:
-
-```{r}
-age_group <- descriptives_by_stratum(age) |>
-  mutate("panel" = "Age group")
-
-income_bracket <- descriptives_by_stratum(income) |>
-  mutate("panel" = "Income")
-
-sex_group <- descriptives_by_stratum(sex) |>
-  mutate("panel" = "Sex")
-
-table_descriptives <- bind_rows(age_group, 
-                                income_bracket,
-                                sex_group) |>
-  # Their units: billions of trips and millions of observations:
-  mutate("trips" = trips / 1e9,
-         "observations" = observations / 1e6) |>
-  # Relocate the columns so that they follow the same order as theirs:
-  relocate(panel) |>
-  relocate(share, .after = trips)
-
-table_descriptives
-
-dbDisconnect(model_panel_within_con, shutdown = TRUE)
-```
-
-And we export it to LaTeX, so that it can be read next to theirs:
-
-```{r}
-#| message: false
-
-# Define readable names for the activities, as in 08_plot_the_models.qmd:
-activity_labels <- c("work_or_study" = "Work or study",
-                     "frequent_activity" = "Frequent",
-                     "infrequent_activity" = "Infrequent")
-
-table_descriptives_latex <- table_descriptives |>
-  mutate("activity_destination" = activity_labels[activity_destination]) |>
-  # Write the name of the stratum and of the panel only on the first of their
-  # rows, so that the table reads as the three blocks of theirs:
-  mutate("stratum" = if_else(row_number() == 1, stratum, ""),
-         .by = c(panel, stratum)) |>
-  mutate("panel" = if_else(row_number() == 1, panel, ""),
-         .by = panel)
-
-# A line between the three panels of the table. kable writes whatever linesep
-# says after each row, taking the values in order, so we ask for a line on the
-# last row of each panel: the one whose next row already belongs to another one.
-# "\midrule" is the horizontal rule of the booktabs LaTeX package:
-block_rules <- if_else(lead(table_descriptives_latex$panel, default = "") != "",
-                       "\\midrule", "")
-
-# And generate the table with kable():
-table_descriptives_latex |>
-  kable(format = "latex", booktabs = TRUE,
-        # Define column names:
-        col.names = c("", "", "Activity", "Total (billions)", "Share (%)",
-                      "Observations (millions)", "Districts"),
-        # Define the number of decimals we want in each column:
-        digits = c(0, 0, 0, 2, 1, 2, 0),
-        # This replaces the blank line kable adds every five rows:
-        linesep = block_rules) |>
-  # We use kableExtra's function add_header_above() to add the "trips" header
-  # above the two columns referring to trips:
-  add_header_above(c(" " = 3, "Trips" = 2, " " = 2)) |>
-  # Give it no caption and no label, because with them kable wraps the table in
-  # a block that never prints inside the adjustbox the report needs to fit its
-  # width. We write the caption, the label and the adjustbox by hand in the
-  # final document.
-  as.character() |>
-  # Set the file path:
-  writeLines("../report/tables/table_descriptives.tex")
-```
-
 ## Descriptive statistics (trips terminating in the district)
 
 We build a table equivalent to table S1 in the Supplementary Material of Renninger and Cabrera (2026), so that both can be read side by side.
@@ -286,7 +137,11 @@ activity_labels <- c("work_or_study" = "Work or study",
                      "infrequent_activity" = "Infrequent")
 
 table_descriptives_latex <- table_descriptives |>
-  mutate("activity_destination" = activity_labels[activity_destination]) |>
+  # as.character() because DuckDB returns the column as a factor, and
+  # indexing a named vector with a factor uses the level number and not
+  # the text, which left the work or study rows without a label:
+  mutate("activity_destination" =
+           activity_labels[as.character(activity_destination)]) |>
   # Write the name of the stratum and of the panel only on the first of their
   # rows, so that the table reads as the three blocks of theirs:
   mutate("stratum" = if_else(row_number() == 1, stratum, ""),
@@ -323,6 +178,105 @@ table_descriptives_latex |>
   writeLines("../report/tables/table_descriptives_terminating.tex")
 ```
 
+## Descriptive statistics (within trips)
+
+Just for comparison (not exported to the final document) we build the same table for just trips within district.
+
+```{r}
+#| message: false
+
+model_panel_within_con <- dbConnect(
+  duckdb(),
+  dbdir = "../data/model_panels/model_panel_within.duckdb",
+  read_only = TRUE # We won't edit the database in this script
+  )
+
+# We set the maximum CPU threads and RAM usage, we are working on a powerful
+# computer, these values should be adapted to your machine:
+dbExecute(model_panel_within_con, "SET memory_limit = '128GB'")
+dbExecute(model_panel_within_con, "SET threads = 24")
+
+# Load the lazy table:
+trips_panel_demographic <- tbl(model_panel_within_con,
+                               "trips_panel_demographic")
+```
+
+Each of their three panels in Renninger and Cabrera (2026) adds up to 100% on its own, and the totals differ, meaning they drop the NA values and compute the shares over the trips that are left. We do the same.
+
+Define a funciton to the same operation to the three strata:
+
+```{r}
+descriptives_by_stratum <- function(stratum) {
+
+  # The same subset for the three queries below: the districts outside Spain
+  # have no UTCI, NAs are dropped. The stratum is embraced so that the
+  # function looks inside it for the column name (see R4DS 25.3 here:
+  # https://r4ds.hadley.nz/functions.html#data-frame-functions), and renamed
+  # so that the three variables can be put together later with bind_rows():
+  stratum_panel <- trips_panel_demographic |>
+    filter(!is.na(utci), !is.na({{stratum}})) |>
+    rename("stratum" = {{stratum}})
+
+  # Sum the trips by stratum and activity at destination:
+  stratum_trips <- stratum_panel |>
+    group_by(stratum, activity_destination) |>
+    summarise("trips" = sum(n_trips), .groups = "drop") |>
+    collect()
+
+  # Observations in our sample are district-day cells, so we count the distinct
+  # date and district each group appears in:
+  stratum_observations <- stratum_panel |>
+    distinct(stratum, activity_destination, date, id_destination) |>
+    count(stratum, activity_destination, name = "observations") |>
+    collect()
+
+  # And count distinct districts, the last column in their table S1:
+  stratum_districts <- stratum_panel |>
+    distinct(stratum, activity_destination, id_destination) |>
+    count(stratum, activity_destination, name = "districts") |>
+    collect()
+
+  # Put the three together:
+  stratum_trips |>
+    left_join(stratum_observations,
+              by = join_by(stratum, activity_destination)) |>
+    left_join(stratum_districts,
+              by = join_by(stratum, activity_destination)) |>
+    mutate(
+      # Add the trip share (calculated inside each stratum)
+      "share" = 100 * trips / sum(trips),
+      # And the stratum name:
+      "stratum" = as.character(stratum))
+}
+```
+
+Apply the function to the three strata and bind them together in a single table:
+
+```{r}
+age_group <- descriptives_by_stratum(age) |>
+  mutate("panel" = "Age group")
+
+income_bracket <- descriptives_by_stratum(income) |>
+  mutate("panel" = "Income")
+
+sex_group <- descriptives_by_stratum(sex) |>
+  mutate("panel" = "Sex")
+
+table_descriptives <- bind_rows(age_group, 
+                                income_bracket,
+                                sex_group) |>
+  # Their units: billions of trips and millions of observations:
+  mutate("trips" = trips / 1e9,
+         "observations" = observations / 1e6) |>
+  # Relocate the columns so that they follow the same order as theirs:
+  relocate(panel) |>
+  relocate(share, .after = trips)
+
+table_descriptives
+
+dbDisconnect(model_panel_within_con, shutdown = TRUE)
+```
+
 ## Heat days by district
 
 ```{r}
@@ -330,11 +284,21 @@ table_descriptives_latex |>
 # large areas:
 single_colour <- "#8DA0CB"
 
-# The panel of the reproduction models, which already carries the bins:
+# The panel of the reproduction models, already restricted to 25-50 degrees:
 panel_reproduction_within <- readRDS(
   "../data/model_panels/panel_reproduction_within.rds")
 
 heat_day_district <- panel_reproduction_within |>
+  # This panel keeps the raw UTCI, the bins are created in
+  # 07b_estimate_the_models_within_district.qmd, so we repeat them here:
+  mutate(
+    "utci_bins" = case_when(
+      utci >= 25 & utci < 30 ~ "25-30",
+      utci < 35 ~ "30-35",
+      utci < 40 ~ "35-40",
+      utci < 45 ~ "40-45",
+      utci < 50 ~ "45-50")
+  ) |>
   # Count distinct district-days by utci bin:
   distinct(date, id_destination, utci_bins) |>
   count(utci_bins, name = "district_days")
