@@ -76,7 +76,7 @@ mitma_daily |>
   mutate("home_trips_share" = total_home_trips / total_trips)
 ```
 
-74.41% of the trips have home as their origin or as their destination. While losing 25.59% of the trips is not ideal (specially since we are not losing them at random), having the possibility of assigning the correct income from INE to three fourths of the trips is good news.
+A 74.38% of the trips have home as their origin or as their destination. While losing 25.62% of the trips is not ideal (specially since we are not losing them at random), having the possibility of assigning the correct income from INE to three fourths of the trips is good news.
 
 ## Bias of the trips kept
 
@@ -205,6 +205,8 @@ ggplot(home_trips_shares,
   theme(panel.grid.major.y = element_blank())
 ```
 
+Trip loses are relatively equal across category, except for origin and destination activity, where we clearly lose more of the infrequent trips than other kind of trips.
+
 ### Geographic bias
 
 Finally, we plot a map to check whether there is geographical bias in the missing values. We plot two versions: the first one with the total amount of trips with origin in each district, the second one with total amount of trips with destination in each district. This way, we are not blind to biases affecting certain directions of travel.
@@ -220,7 +222,7 @@ mitma_districts <- mitma_districts |>
   filter(!str_starts(id, "35|38|51|52"))
 ```
 
-We aggregate the trips from the duckDB grouping by `id_origin` and `id_destination`:
+Aggregate the trips from the duckDB grouping by `id_origin` and `id_destination`:
 
 ```{r}
 # This grouping by itself allows us to collect into the session memory:
@@ -270,7 +272,7 @@ min(total_trips_origin$total_trips)
 min(total_trips_destination$total_trips)
 ```
 
-\[ACTUALIZAR CUANDO LO CORRA EN EL SERVER\] The smallest values are still in the thousands. We now join the geometries and plot one map per direction:
+The smallest values are still in the hundreds We now join the geometries and plot one map per direction:
 
 ```{r}
 # We start by defining the scale:
@@ -300,6 +302,8 @@ mitma_districts |>
   labs(title = "Destination trips", fill = "Trips kept (%)") +
   theme_tfm_map
 ```
+
+There's no clear geographic bias in the trips lost.
 
 We close the connection to the database:
 
