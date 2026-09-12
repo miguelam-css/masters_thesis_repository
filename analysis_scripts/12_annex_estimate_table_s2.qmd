@@ -195,4 +195,29 @@ etable(model_s2_within_no_home, model_s2_between_no_home,
        fitstat = ~ n + sq.cor + pr2)
 ```
 
+This last table is the one that comes closest to their table, so it is the one
+we export:
+
+```{r}
+# Create the directory to save the table there:
+dir.create("../report/tables", showWarnings = FALSE, recursive = TRUE)
+
+etable(model_s2_within_no_home, model_s2_between_no_home,
+       headers = c("Within districts", "Between districts"),
+       # Print only the statistics we want, as in scripts 07a and 07b:
+       fitstat = ~ n + sq.cor + pr2,
+       title = paste0("Effect of a day above 40 °C on the flows terminating ",
+                      "in a district, by activity at destination. ",
+                      "Our estimation of table S2 of Renninger and ",
+                      "Cabrera (2026)"),
+       # The LaTeX label, we will use this to reference the table:
+       label = "table_s2_reproduction",
+       fontsize = "small",
+       # To make the etable in LaTeX format:
+       tex = TRUE,
+       file = "../report/tables/table_s2_reproduction.tex",
+       # Overwrite the file instead of appending to it:
+       replace = TRUE)
+```
+
 We don't find the results reported by Renninger and Cabrera (2026). Dropping the home trips gives us relatively close results in the within districts model, the between district models are far from their results. 
