@@ -1,0 +1,135 @@
+---
+title: "Building the panel to reproduce table S2"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+## Overview and set up
+
+In this document we build the panel to try to reproduce table S2 in the Supplementary Material of Renninger and Cabrera (2026), which estimates the effect of a day above 40 degrees on the flows within a district and between districts.
+
+```{r}
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(purrr)
+library(stringr)
+library(lubridate)
+library(DBI)
+library(duckdb)
+```
+
+## Connect to the daily trips DuckDB
+
+```{r}
+# We connect to the MITMS daily trips duckdb:
+mitma_daily_con <- dbConnect(
+  duckdb(),
+  dbdir = "../data/mitma_daily/mitma_daily.duckdb",
+  read_only = TRUE # We won't edit the database in this script
+  )
+
+# We set the maximum CPU threads and RAM usage, we are working on a powerful
+# computer, these values should be adapted to your machine:
+dbExecute(mitma_daily_con, "SET memory_limit = '128GB'")
+dbExecute(mitma_daily_con, "SET threads = 24")
+
+# Load the lazy table:
+mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
+
+# Following Renninger and Cabrera (2026) we exclude the Canary Islands,
+# Ceuta, and Melilla from our analysis, so we drop them:
+mitma_daily <- mitma_daily |>
+  filter(!str_starts(id_destination, "35|38|51|52"),
+         !str_starts(id_origin, "35|38|51|52"))
+```
+
+## Load the UTCI table
+
+We settled on 14:00 UTC (16:00 local time) so we keep only that hour:
+
+```{r}
+utci_per_mitma <- readRDS("../data/mitma_zones_utci_added/utci_per_mitma.rds")
+
+utci_1400 <- utci_per_mitma |>
+  select(mitma_zone_id, date, "utci" = h14)
+```
+
+As in script 06, we register the tibble as a virtual table in the DuckDB connection so that it can be joined with the daily trips database.
+
+```{r}
+# Register the tibble as a virtual table:
+duckdb_register(mitma_daily_con, "utci_1400", utci_1400)
+
+# Make it a lazy table to be able to join:
+utci_db <- tbl(mitma_daily_con, "utci_1400")
+```
+
+Finally, the dates we loop over below:
+
+```{r}
+# The dates of the study period. They have to be characters, the for loop
+# converts the "date" class into numbers, we need the full string to be
+# able to join by date with the mitma_daily DuckDB database:
+study_dates <- c(
+  seq(as_date("2022-05-01"), as_date("2022-09-30")),
+  seq(as_date("2023-05-01"), as_date("2023-09-30"))
+  ) |>
+  as.character()
+```
+
+## Aggregate the trips
+
+We create a variable `same_district`: it is `TRUE` for the trips within a district, and `FALSE` for the trips between districts.
+
+```{r}
+daily_panels <- vector("list", length(study_dates))
+names(daily_panels) <- study_dates
+
+# Run the for loop for every day in our study period:
+for (one_date in study_dates) {
+
+  daily_panels[[one_date]] <- mitma_daily |>
+    filter(date == one_date) |>
+    # Join the UTCI data with mitma_daily:
+    left_join(utci_db, by = join_by(id_destination == mitma_zone_id, date)) |>
+    # Flows within a district are the ones whose origin and destination are
+    # the same district, flows between districts are all the others:
+    mutate("same_district" = if_else(id_origin == id_destination,
+                                     TRUE, FALSE)) |>
+    # Group by the variables the model uses, and sum the trips:
+    group_by(date, id_destination, activity_destination, same_district, utci) |>
+    summarise("n_trips" = sum(n_trips), .groups = "drop") |>
+    collect() |>
+    # DuckDB returns the ids as factors, and we want them as text in the
+    # panel so that later joins do not have to convert them:
+    mutate(
+      "id_destination" = as.character(id_destination),
+      # The province, to cluster the standard errors. It is
+      # the first two digits of the district id:
+      "province" = str_sub(id_destination, end = 2))
+}
+
+panel_table_s2 <- list_rbind(daily_panels)
+```
+
+The districts that have no UTCI are the Portuguese and French ones, plus the trips whose destination is outside the study area. We drop them:
+
+```{r}
+panel_table_s2 <- panel_table_s2 |>
+  filter(!is.na(utci))
+
+glimpse(panel_table_s2)
+```
+
+## Save the panel
+
+```{r}
+dir.create("../data/model_panels", showWarnings = FALSE, recursive = TRUE)
+
+saveRDS(panel_table_s2, "../data/model_panels/panel_table_s2.rds")
+
+dbDisconnect(mitma_daily_con, shutdown = TRUE)
+```

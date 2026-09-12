@@ -1,0 +1,198 @@
+---
+title: "Estimating table S2 (extreme heat by activity type)"
+author: "Miguel Agenjo Montejo"
+format: html
+editor: visual
+---
+
+## Overview and set up
+
+In this document we estimate table S2 in the Supplementary Material of Renninger and Cabrera (2026): the effect of a day above 40 degrees on the flows terminating in a district, by type of activity at destination, within a district and between districts.
+
+Their table reports three activities and the data has four, so one of them has to be the reference category, and the table does not say which. We estimate the three readings on each of the two samples, six models in all: the trips home as the reference category, the same with one coefficient per activity, and the trips home dropped.
+
+```{r}
+#| message: false
+#| warning: false
+
+library(dplyr)
+library(forcats)
+library(fixest)
+```
+
+## Prepare the panel
+
+```{r}
+panel_table_s2 <- readRDS("../data/model_panels/panel_table_s2.rds")
+
+panel_table_s2 <- panel_table_s2 |>
+  mutate(
+    # The temperature enters as a dummy, the days above 40 degrees against
+    # every other day of the study period:
+    "over_40" = if_else(utci > 40, "yes", "no"),
+    # Trips home are the reference category, so they have to be the first
+    # level of the factor:
+    "activity_destination" = fct_relevel(activity_destination, "home")
+    ) |>
+  # Once the dummy is built we no longer need the temperature itself:
+  select(!utci)
+
+glimpse(panel_table_s2)
+
+# Check if there are any NAs before passing the panel to fepois():
+panel_table_s2 |> summarise(across(everything(), ~ sum(is.na(.x))))
+```
+
+The dictionary that renames the coefficients in every table below:
+
+```{r}
+setFixest_dict(c(
+  "n_trips" = "Flows",
+  "activity_destinationwork_or_study" = "Work or Study",
+  "activity_destinationfrequent_activity" = "Frequent Activity",
+  "activity_destinationinfrequent_activity" = "Infrequent Activity",
+  "over_40yes" = "UTCI > 40",
+  "date" = "Date",
+  "id_destination" = "District"
+  ))
+
+# Create the directory to save the models there:
+dir.create("../data/models", showWarnings = FALSE, recursive = TRUE)
+```
+
+## Split the two samples
+
+The two columns of the table are two samples, so we split the panel in two:
+
+```{r}
+panel_within <- panel_table_s2 |>
+  filter(same_district)
+
+panel_between <- panel_table_s2 |>
+  filter(!same_district)
+```
+
+## Trips home as the reference category
+
+### Within districts
+
+```{r}
+model_s2_within_vs_home <- fepois(
+  fml = n_trips ~ activity_destination * over_40 | date + id_destination,
+  data = panel_within,
+  cluster = ~province,
+  mem.clean = TRUE,
+  nthreads = 48 # Set this value according to your computer
+  )
+```
+
+### Between districts
+
+```{r}
+model_s2_between_vs_home <- fepois(
+  fml = n_trips ~ activity_destination * over_40 | date + id_destination,
+  data = panel_between,
+  cluster = ~province,
+  mem.clean = TRUE,
+  nthreads = 48
+  )
+```
+
+## One coefficient per activity
+
+### Within districts
+
+```{r}
+model_s2_within <- fepois(
+  fml = n_trips ~ activity_destination +
+    activity_destination:over_40 | date + id_destination,
+  data = panel_within,
+  cluster = ~province,
+  mem.clean = TRUE,
+  nthreads = 48
+  )
+```
+
+### Between districts
+
+```{r}
+model_s2_between <- fepois(
+  fml = n_trips ~ activity_destination +
+    activity_destination:over_40 | date + id_destination,
+  data = panel_between,
+  cluster = ~province,
+  mem.clean = TRUE,
+  nthreads = 48
+  )
+```
+
+## Trips home dropped
+
+The third possibility is that they dropped the trips home altogether, which is what we assumed in script 06, and that their three coefficients are the drops of the three remaining activities:
+
+### Within districts
+
+```{r}
+panel_within_no_home <- panel_within |>
+  filter(activity_destination != "home") |>
+  mutate("activity_destination" = fct_drop(activity_destination))
+
+model_s2_within_no_home <- fepois(
+  fml = n_trips ~ activity_destination +
+    activity_destination:over_40 | date + id_destination,
+  data = panel_within_no_home,
+  cluster = ~province,
+  mem.clean = TRUE,
+  nthreads = 48
+  )
+```
+
+### Between districts
+
+```{r}
+panel_between_no_home <- panel_between |>
+  filter(activity_destination != "home") |>
+  mutate("activity_destination" = fct_drop(activity_destination))
+
+model_s2_between_no_home <- fepois(
+  fml = n_trips ~ activity_destination +
+    activity_destination:over_40 | date + id_destination,
+  data = panel_between_no_home,
+  cluster = ~province,
+  mem.clean = TRUE,
+  nthreads = 48
+  )
+```
+
+## Save the six models
+
+```{r}
+saveRDS(model_s2_within, "../data/models/model_s2_within.rds")
+saveRDS(model_s2_between, "../data/models/model_s2_between.rds")
+saveRDS(model_s2_within_vs_home, "../data/models/model_s2_within_vs_home.rds")
+saveRDS(model_s2_between_vs_home, "../data/models/model_s2_between_vs_home.rds")
+saveRDS(model_s2_within_no_home, "../data/models/model_s2_within_no_home.rds")
+saveRDS(model_s2_between_no_home, "../data/models/model_s2_between_no_home.rds")
+```
+
+## Compare with their table
+
+```{r}
+etable(model_s2_within, model_s2_between,
+       headers = c("Within districts", "Between districts"),
+       fitstat = ~ n + sq.cor + pr2)
+```
+
+```{r}
+etable(model_s2_within_vs_home, model_s2_between_vs_home,
+       headers = c("Within districts", "Between districts"),
+       fitstat = ~ n + sq.cor + pr2)
+```
+
+```{r}
+etable(model_s2_within_no_home, model_s2_between_no_home,
+       headers = c("Within districts", "Between districts"),
+       fitstat = ~ n + sq.cor + pr2)
+```
+
+We don't find the results reported by Renninger and Cabrera (2026). Dropping the home trips gives us relatively close results in the within districts model, the between district models are far from their results. 

@@ -48,7 +48,8 @@ mitma_daily <- tbl(mitma_daily_con, "mitma_daily")
 # Following Renninger and Cabrera (2026) we exclude the Canary Islands,
 # Ceuta, and Melilla from our analysis, so we drop them:
 mitma_daily <- mitma_daily |>
-  filter(!str_starts(id_destination, "35|38|51|52"))
+  filter(!str_starts(id_destination, "35|38|51|52"),
+         !str_starts(id_origin, "35|38|51|52"))
 
 # And, as explained above, we drop the trips whose activity at destination
 # is "home":
