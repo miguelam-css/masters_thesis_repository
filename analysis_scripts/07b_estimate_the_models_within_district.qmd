@@ -60,7 +60,7 @@ panel_a |> summarise(across(everything(), ~ sum(is.na(.x))))
 # There are no NAs
 ```
 
-While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating swap memory (they require nearly 18GB of RAM to run, we recommend making sure you have some more than that).- We save the .rds files so that on a smaller personal computer each model can be estimated in a new seesion by restarting R just before running the chunk, which can just load `fixest`, read the panel from the .rds, and run `fepois()` with as much free RAM as possible.
+While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating swap memory (they require nearly 18GB of RAM to run, we recommend making sure you have some more than that). We save the .rds files so that on a smaller personal computer each model can be estimated in a new session by restarting R just before running the chunk, which can just load `fixest`, read the panel from the .rds, and run `fepois()` with as much free RAM as possible.
 
 ```{r}
 # To allow  fepois() to run in a session with as much free RAM as possible,
@@ -465,7 +465,7 @@ readRDS("../data/model_panels/panel_d_within.rds") |>
   summarise("trips" = sum(n_trips), "rows" = n())
 ```
 
-We have 4,501,183,295 in panel A, 2,770,715,850 in panel B, 2,770,041,481 in panel C, and 2,770,041,481 in panel D.
+We have 4,501,183,295 trips in panel A, 2,770,715,850 in panel B, 2,770,041,481 in panel C, and 2,770,041,481 in panel D.
 
 ## Intersectionality model
 
@@ -544,7 +544,7 @@ And drop the missing trips:
 # Drop the rows with missing data:
 panel_intersectionality <- panel_intersectionality |> drop_na()
 
-# And save the clean panel, so that the three models start from it:
+# And save the clean panel, so that the model starts from it:
 saveRDS(panel_intersectionality, "../data/model_panels/panel_intersectionality_clean_within.rds")
 ```
 

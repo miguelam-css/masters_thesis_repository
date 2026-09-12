@@ -362,7 +362,7 @@ ggsave_tfm("../report/figures/plot1b_irr_by_income_pointrange_within.pdf",
 ### Load data
 
 ```{r}
-# Load the model:
+# Load the model (this object is 16.2GB):
 model_full <- readRDS("../data/models/model_full_within.rds")
 
 # Extract the coefficients with their confidence intervals:
@@ -431,7 +431,7 @@ data_plot_2 <- coefficients_full |>
 
 ```{r}
 #| fig-width: 5.9
-#| fig-height: 7
+#| fig-height: 5.5
 
 # Create the plot:
 plot_2 <- ggplot(data_plot_2,
