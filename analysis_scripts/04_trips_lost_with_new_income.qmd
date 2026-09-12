@@ -59,7 +59,8 @@ Renninger and Cabrera (2026, p. 10) describe their geographical area of study as
 # 52: Melilla
 
 mitma_daily <- mitma_daily |>
-  filter(!str_starts(id_destination, "35|38|51|52"))
+  filter(!str_starts(id_destination, "35|38|51|52"),
+         !str_starts(id_origin, "35|38|51|52"))
 
 ```
 
