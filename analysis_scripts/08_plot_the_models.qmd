@@ -26,6 +26,9 @@ library(knitr)
 
 # We defined a custom theme for all the figures in the masters thesis:
 source("../dataviz_theme/theme_tfm.R")
+
+# Create the directory to save the figures there:
+dir.create("../report/figures", showWarnings = FALSE, recursive = TRUE)
 ```
 
 ## Labels and colors
