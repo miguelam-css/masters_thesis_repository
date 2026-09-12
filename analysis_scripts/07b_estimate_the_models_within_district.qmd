@@ -13,7 +13,7 @@ The first four models share the same specification, and differ only in the incom
 
 Then we run a fifth model, which uses INE income terciles and lets that income variable interact with the activity of the trip, with gender and with age. Estimating the whole cross in one model is what lets us compare activities, age groups and genders against each other.
 
-Regarding the computational requirements to run the models: the reproduction models (A, B, C, and D) need nearly 25GB of free RAM if run one by one. In other words: an R Session restarted just before running the chunk with `fepois()` peaks at 25GB of RAM when running that chunk; we recommend making sure you have enough RAM available before running each model. The intersectionality model peaked at 110GB of RAM, we thus recommend making sure you have at least that amount of free space before running the chunk containing its `fepois()`.
+Regarding the computational requirements to run the models: the reproduction models (A, B, C, and D) need nearly 18GB of free RAM if run one by one. In other words: an R Session restarted just before running the chunk with `fepois()` peaks at 18GB of RAM when running that chunk; we recommend making sure you have enough RAM available before running each model. The intersectionality model peaked at 110GB of RAM, we thus recommend making sure you have at least that amount of free space before running the chunk containing its `fepois()`.
 
 
 ```{r}
@@ -60,7 +60,7 @@ panel_a |> summarise(across(everything(), ~ sum(is.na(.x))))
 # There are no NAs
 ```
 
-While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating swap memory (they require nearly 25GB of RAM to run, we recommend making sure you have some more than that).- We save the .rds files so that on a smaller personal computer each model can be estimated in a new seesion by restarting R just before running the chunk, which can just load `fixest`, read the panel from the .rds, and run `fepois()` with as much free RAM as possible.
+While it is not necessary in the computer in which we are running the models, we save the panel as an .rds file to make it easy for smaller computers to run these four models. Most personal computers should be able to run these first four models allocating swap memory (they require nearly 18GB of RAM to run, we recommend making sure you have some more than that).- We save the .rds files so that on a smaller personal computer each model can be estimated in a new seesion by restarting R just before running the chunk, which can just load `fixest`, read the panel from the .rds, and run `fepois()` with as much free RAM as possible.
 
 ```{r}
 # To allow  fepois() to run in a session with as much free RAM as possible,
@@ -465,7 +465,7 @@ readRDS("../data/model_panels/panel_d_within.rds") |>
   summarise("trips" = sum(n_trips), "rows" = n())
 ```
 
-We have 4,507,442,774 in panel A, 2,775,401,064 in panel B, 2,774,726,695 in panel C, and 2,774,726,695 in panel D.
+We have 4,501,183,295 in panel A, 2,770,715,850 in panel B, 2,770,041,481 in panel C, and 2,770,041,481 in panel D.
 
 ## Intersectionality model
 
@@ -510,7 +510,7 @@ panel_intersectionality |>
          "pct_trips" = trips / sum(trips) * 100)
 ```
 
-Three columns include NAs: `ine_income_tercile`, `age`, and `sex`. The missing trips on `ine_income_tercile` are just 0.024% (0.45% of rows), but in `age` and `sex` we are losing a significant amount of trips: 15.61% for `age` and 24.05% for `sex` (18.76% and 42.80% of the rows, respectively). But this does not mean we are losing the sum of these trips, since there could be NAs in the same row.
+Three columns include NAs: `ine_income_tercile`, `age`, and `sex`. The missing trips on `ine_income_tercile` are just 0.024% (0.45% of rows), but in `age` and `sex` we are losing a significant amount of trips: 15.61% for `age` and 24.04% for `sex` (18.76% and 42.80% of the rows, respectively). But this does not mean we are losing the sum of these trips, since there could be NAs in the same row.
 
 ```{r}
 # Check how many trips are missing any variable:
@@ -521,7 +521,7 @@ panel_intersectionality |>
          "pct_trips" = trips / sum(trips) * 100)
 ```
 
-A 24.06% of the trips are missing at least one of these variables (42.83% of the rows), but we still have data on over 667 million trips (over 4 million rows). We check whether these trips concentrate in an income tercile:
+A 24.06% of the trips are missing at least one of these variables (42.83% of the rows), but we still have data on over 666 million trips (over 4 million rows). We check whether these trips concentrate in an income tercile:
 
 ```{r}
 # The same count, this time within each income tercile, so that the percentages
@@ -536,7 +536,7 @@ panel_intersectionality |>
   arrange(ine_income_tercile, missing_any)
 ```
 
-The loss is not even in terms of trips: we lose 31.73% of the trips of the low tercile (47.67% of the rows), 24.13% of the trips in the middle tercile (41.21% of the rows), and only 14.92% of the trips (37.06% of rows) in the high one.
+The loss is not even in terms of trips: we lose 31.71% of the trips of the low tercile (47.67% of the rows), 24.10% of the trips in the middle tercile (41.20% of the rows), and only 14.92% of the trips (37.06% of rows) in the high one.
 
 And drop the missing trips:
 
@@ -575,7 +575,7 @@ saveRDS(model_full, "../data/models/model_full_within.rds")
 ```
 
 ```{r}
-# Read the model to check everything worked out
+# Read the model to check everything worked out (this object is 16.2GB)
 model_full <- readRDS("../data/models/model_full_within.rds")
 
 etable(model_full)

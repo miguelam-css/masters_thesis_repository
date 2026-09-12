@@ -220,7 +220,7 @@ panel_c |>
     mutate("pct_trips" = trips / sum(trips) * 100)
 ```
 
-We find NAs in `ine_income_bracket`, as expected, since there were some MITMS zones that didn't include INE section codes. The amount of NAs, however, is residual, they represent just 0.0348% of the trips. We drop them and save the .rds file.
+We find NAs in `ine_income_bracket`, as expected, since there were some MITMS zones that didn't include INE section codes. The amount of NAs, however, is residual, they represent just 0.0339% of the trips. We drop them and save the .rds file.
 
 ```{r}
 # Drop the NAs:
@@ -405,8 +405,8 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
          headers = c("Full sample, MITMS income", "Subsample, MITMS income",
                      "Subsample, INE income"),
          # Print only the statistics we want. By default etable() also prints
-         # the BIC, which we don't need. On top of that, models B, C and F
-         # printed a BIC below 1 while the others had BICS of billions, computing
+         # the BIC, which we don't need. On top of that, some of the models
+         # printed a BIC below 1 while the others had BICs of billions, computing
          # it with BIC() gave numbers in the same orders of magnitude for all
          # of them, so it must be a problem with `fixest`:
          fitstat = ~ n + sq.cor + pr2,
@@ -446,5 +446,4 @@ for (utci_bin in c("30-35", "35-40", "40-45", "45-50")) {
 }
 ```
 
-These models perform worse than the models using the within district trips panel, results from the models in script `7b_estimate_the_models_within_trips.qmd` are closer to Renninger and Cabrera (2026), which provides further evidence that the within district trips panel was the panel they used.
-
+These models perform worse than the models using the within district trips panel, results from the models in script `07b_estimate_the_models_within_district.qmd` are closer to Renninger and Cabrera (2026), which provides further evidence that the within district trips panel was the panel they used.
