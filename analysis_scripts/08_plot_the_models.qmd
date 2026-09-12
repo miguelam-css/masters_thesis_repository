@@ -674,6 +674,10 @@ The figures above show which cells can be told apart from no effect, but not how
 ```{r}
 coefficients_full |>
   summarise("crossings" = n(),
+            "significant_001" = sum(p.value <= 0.01),
             "significant_005" = sum(p.value <= 0.05),
             "significant_01" = sum(p.value <= 0.1))
 ```
+
+Out of 288 crossings, 63 are significant at the 0.01 level, 99 at the 0.05 level, and 120 at the 0.1 level (each count includes the previous one).
+
