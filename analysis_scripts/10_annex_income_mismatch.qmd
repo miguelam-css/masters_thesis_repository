@@ -242,7 +242,7 @@ An exploration of the datasets allows us to answer this question, since the only
 
 ```{r}
 #| fig-width: 5.9
-#| fig-height: 4.4
+#| fig-height: 3
 
 # Plot distributions of income for the year 2023:
 plot_income_distribution <- function(income_data, variable_name, year_chosen) {
@@ -271,7 +271,7 @@ plot_income_distributions
 # Save it:
 ggsave_tfm("../report/figures/income_variable_distributions.pdf",
            plot_income_distributions,
-           width = 5.9, height = 4.4)
+           width = 5.9, height = 3)
 ```
 
 The histograms above point to mean net individual income as the variable MITMS is using, since it shows the only sensible distribution given the cuts chosen (at 10,000 and 15,000 euros). To check this is the case, we contrast the the bracket MITMS reports for each zone against the bracket it would fall into according to the INE variable. We look at the MITMS zones that are formed of just one census tract (this way there is no doubt about how the census tract income should be translated into MITMS zone income). We do it for every combination of income variable and year:
@@ -384,7 +384,7 @@ data_mismatches <- mismatches_grid |>
 
 ```{r}
 #| fig-width: 5.9
-#| fig-height: 4.4
+#| fig-height: 2
 
 # And plot a lineplot:
 plot_mismatches <- ggplot(data_mismatches, aes(x = year, y = mismatches)) +
@@ -392,7 +392,9 @@ plot_mismatches <- ggplot(data_mismatches, aes(x = year, y = mismatches)) +
   geom_point(colour = "black") +
   # One break per year:
   scale_x_continuous(breaks = sort(unique(mismatches_grid$year))) +
-  labs(x = NULL, y = "Single section zones in a different bracket in INE and MITMS") +
+  labs(x = NULL,
+       # In two lines, it does not fit the height of the figure:
+       y = "Single section zones in a different\nbracket in INE and MITMS") +
   theme_tfm
 
 plot_mismatches
@@ -400,7 +402,7 @@ plot_mismatches
 # Save it:
 ggsave_tfm("../report/figures/bracket_mismatches_by_year_line.pdf",
        plot_mismatches,
-       width = 5.9, height = 4.4)
+       width = 5.9, height = 2)
 ```
 
 ## Is income assigned at the section or the MITMS zone level?
@@ -674,11 +676,6 @@ plot_share_comparison <- ggplot(share_comparison,
   theme_tfm
 
 plot_share_comparison
-
-# Save it:
-ggsave_tfm("../report/figures/income_assignment_level_scatter.pdf",
-       plot_share_comparison,
-       width = 5, height = 5)
 ```
 
 Income is clearly not assigned at the census tract level, otherwise the dots would approximately follow the diagonal, and we see huge concentrations of dots at 0 and 100%. However, the plot also reveals it is not being assigned at the zone level either, since otherwise all dots should be at 0% or 100%.
