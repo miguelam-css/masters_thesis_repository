@@ -209,9 +209,7 @@ etable(model_s2_within_no_home, model_s2_between_no_home,
        # Print only the statistics we want, as in scripts 07a and 07b:
        fitstat = ~ n + sq.cor + pr2,
        title = paste0("Effect of a day above 40 °C on the flows terminating ",
-                      "in a district, by activity at destination. ",
-                      "Our estimation of table S2 of Renninger and ",
-                      "Cabrera (2026)"),
+                      "in a district, by activity at destination."),
        # The LaTeX label, we will use this to reference the table:
        label = "table_s2_reproduction",
        fontsize = "small",
