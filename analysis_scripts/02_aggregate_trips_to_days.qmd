@@ -112,7 +112,7 @@ mitma_daily <- mitma_daily |>
     )
 ```
 
-It must be noted that there are no trips with origin and destination "home" in the dataset, thus there is no problem assigning INE's income (it would be a problem if there were this kind of trips between different districts). We confirm there are no home-home trips this below:
+It must be noted that there are no trips with origin and destination "home" in the dataset, thus there is no problem assigning INE's income (it would be a problem if there were this kind of trips between different districts). We confirm there are no home-home trips below:
 
 ```{r}
 # Confirm there are no trips from home to home:
