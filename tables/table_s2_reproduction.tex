@@ -1,0 +1,34 @@
+
+\begin{table}[htbp]
+   \caption{\label{table_s2_reproduction} Effect of a day above 40 °C on the flows terminating in a district, by activity at destination.}
+   \centering
+   \small
+   \begin{tabular}{lcc}
+      \tabularnewline \midrule \midrule
+      Dependent Variable: & \multicolumn{2}{c}{Flows}\\
+                                              & Within districts & Between districts \\   
+      Model:                                  & (1)              & (2)\\  
+      \midrule
+      \emph{Variables}\\
+      Frequent Activity $\times$ UTCI > 40    & -0.0290$^{**}$   & -0.0458$^{***}$\\   
+                                              & (0.0120)         & (0.0145)\\   
+      Infrequent Activity $\times$ UTCI > 40  & -0.1374$^{***}$  & -0.0378\\   
+                                              & (0.0396)         & (0.0326)\\   
+      Work or Study $\times$ UTCI > 40        & -0.0028          & -0.0495$^{***}$\\   
+                                              & (0.0230)         & (0.0143)\\   
+      \midrule
+      \emph{Fixed-effects}\\
+      Date                                    & Yes              & Yes\\  
+      District                                & Yes              & Yes\\  
+      \midrule
+      \emph{Fit statistics}\\
+      Observations                            & 3,135,302        & 3,294,293\\  
+      Squared Correlation                     & 0.95461          & 0.91558\\  
+      Pseudo R$^2$                            & 0.96314          & 0.92889\\  
+      \midrule \midrule
+      \multicolumn{3}{l}{\emph{Clustered (province) standard-errors in parentheses}}\\
+      \multicolumn{3}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabular}
+\end{table}
+
+
