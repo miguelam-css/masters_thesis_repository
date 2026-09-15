@@ -277,7 +277,7 @@ ggsave_tfm("../report/figures/income_variable_distributions.pdf",
            width = 5.9, height = 3)
 ```
 
-The histograms above point to mean net individual income as the variable MITMS is using, since it shows the only sensible distribution given the cuts chosen (at 10,000 and 15,000 euros). To check this is the case, we contrast the the bracket MITMS reports for each zone against the bracket it would fall into according to the INE variable. We look at the MITMS zones that are formed of just one census tract (this way there is no doubt about how the census tract income should be translated into MITMS zone income). We do it for every combination of income variable and year:
+The histograms above point to mean net individual income as the variable MITMS is using, since it shows the only sensible distribution given the cuts chosen (at 10,000 and 15,000 euros). To check this is the case, we contrast the bracket MITMS reports for each zone against the bracket it would fall into according to the INE variable. We look at the MITMS zones that are formed of just one census tract (this way there is no doubt about how the census tract income should be translated into MITMS zone income). We do it for every combination of income variable and year:
 
 We first identify those single census tract zones:
 
@@ -414,7 +414,7 @@ Having settled that MITMS uses mean net income per person from the 2020 ADRH dat
 
 ### One zone as an example
 
-Before testing this on every zone, we show a single example to convey what we are talking about. We choose the zone `2807920`, the district of San Blas-Canillejas, in Madrid, which is made up of census tracts with varying incomes, covering all three income brackets. If income were assigned census tract by census tract, this zone should show trips in every bracket, approximately in proportion to the population living in each of them. We take the number of trips that start at the traveler's home in that zone, on a single working day (Thursday 1st of July 2023), and the income bracket MITMS reports for them. We do this for just one day so that the intepretation is completely straightforward.
+Before testing this on every zone, we show a single example to convey what we are talking about. We choose the zone `2807920`, the district of San Blas-Canillejas, in Madrid, which is made up of census tracts with varying incomes, covering all three income brackets. If income were assigned census tract by census tract, this zone should show trips in every bracket, approximately in proportion to the population living in each of them. We take the number of trips that start at the traveler's home in that zone, on a single working day (Thursday 1st of July 2023), and the income bracket MITMS reports for them. We do this for just one day so that the interpretation is completely straightforward.
 
 ```{r}
 # Get the trips of the chosen day:
@@ -793,4 +793,4 @@ The `income` variable of the MITMS dataset is documented in two different places
 
 - It comes from the **2020 ADRH**, for trips that happen in 2022 and 2023. While it may seem like this is not very important since income doesn't change at rapid rates, given there are only two cuts, the distribution changes drastically: 991 zones would fall in a different bracket with the 2022 data and 1663 with the 2023 data, out of 3707 compared.
 
-- Finally, and while this is outside the scope of our work, we found that it is likely not assigned at the census tract level, as the code book states. If it were, a zone that includes census tracts that fall in different brackets would report trips in all of them, approximately in proportion to the population in them. And that is not what we find in the data. We also find, however, that is could not have been assigned at the zone level. We can not establish what the consignment mechanism was, but it seems like it not what the documentation reports.
+- Finally, and while this is outside the scope of our work, we found that it is likely not assigned at the census tract level, as the code book states. If it were, a zone that includes census tracts that fall in different brackets would report trips in all of them, approximately in proportion to the population in them. And that is not what we find in the data. We also find, however, that it could not have been assigned at the zone level. We can not establish what the consignment mechanism was, but it seems like it not what the documentation reports.
