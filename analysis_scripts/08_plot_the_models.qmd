@@ -7,7 +7,7 @@ editor: visual
 
 ## Overview and set up
 
-The models are estimated and saved in `07b_estimate_the_models_within_district.qmd`. Here we only read them, pull their coefficients into a small tibble, and generate and save the plots. For easier reproducibility in smaller personal computers, we never load more than one model in memory at a time (they weight between 1GB and 14.5 GB).
+The models are estimated and saved in `07b_estimate_the_models_within_district.qmd`. Here we only read them, pull their coefficients into a small tibble, and generate and save the plots. For easier reproducibility in smaller personal computers, we never load more than one model in memory at a time (they weigh between 1GB and 14.5 GB).
 
 ```{r}
 #| message: false
@@ -93,7 +93,7 @@ We read the coefficients with `tidy()`, which returns them in a tibble, with the
 # A vector with all the models we read:
 models_abcd <- c("model_a", "model_b", "model_c", "model_d")
 
-# Create the emty tibble with the coefficients:
+# Create the empty tibble with the coefficients:
 coefficients_abcd_raw <- tibble()
 
 # For every model:
@@ -158,7 +158,7 @@ coefficients_abcd <- coefficients_abcd |>
 glimpse(coefficients_abcd)
 ```
 
-We want to visually distinguish coeffients that are statistically distinguishable from no effect (the confidence interval doesn't include and IRR of 1) by giving more visual weight to their points. We will do that by leaving them filled (leaving hollow those points whose confidence interval crosses an IRR 1). In order to know whatpoints to fill and which to leave blank we create a binary variable with that information:
+We want to visually distinguish coefficients that are statistically distinguishable from no effect (the confidence interval doesn't include an IRR of 1) by giving more visual weight to their points. We will do that by leaving them filled (leaving hollow those points whose confidence interval crosses an IRR 1). In order to know what points to fill and which to leave blank we create a binary variable with that information:
 
 ```{r}
 data_plots_reproduction <- coefficients_abcd |>
@@ -547,7 +547,7 @@ plot_3 <- ggplot(data_plot_3, aes(x = male, y = female,
                                   colour = utci_bins, shape = age)) +
 
   # Draw the diagonal line (where the points should fall if men and women had
-  # the same values, the distance from it is the distance between sexes:
+  # the same values), the distance from it is the distance between sexes:
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey50") +
   
   ## Add the points:
@@ -616,7 +616,7 @@ data_plot_4 <- coefficients_full |>
   # one line (not one for each gender):
   summarise("estimate" = mean(estimate),
             .by = c(activity_destination, income_level, age, utci_bins)) |>
-  # Pivot wirder to get one row per cell, with the three terciles in their
+  # Pivot wider to get one row per cell, with the three terciles in their
   # own columns:
   pivot_wider(names_from = income_level, values_from = estimate) |>
   # The distance between the two ends of the income distribution:
@@ -631,7 +631,7 @@ data_plot_4 <- coefficients_full |>
 plot_4 <- ggplot(data_plot_4, aes(x = utci_bins, y = gap,
                                   colour = age, group = age)) +
 
-  # A dashed line at 0 (reprsenting where both the low and high income tercile   
+  # A dashed line at 0 (representing where both the low and high income tercile   
   # respond to heat in the same way:
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
 
@@ -683,4 +683,3 @@ coefficients_full |>
 ```
 
 Out of 288 crossings, 63 are significant at the 0.01 level, 99 at the 0.05 level, and 120 at the 0.1 level (each count includes the previous one).
-
