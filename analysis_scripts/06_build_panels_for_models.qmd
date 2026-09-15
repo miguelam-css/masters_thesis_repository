@@ -119,7 +119,7 @@ We now add UTCI and INE income to the daily trips table in order to create the i
 - `ine_income_bracket` and `ine_income_tercile`: the income from INE.
 - `utci`: the temperature.
 
-As mentioned above, since the whole panel won't fit the memory of most personal computers, we write it in a new DuckDB for reproducibility.
+As mentioned above, we write it in a new DuckDB so that this script can also be run on a personal computer, where the whole panel would not fit in session memory.
 
 ```{r}
 # We open a second connection, for writing the result. It gets its own RAM and
@@ -135,7 +135,7 @@ dbExecute(model_panel_con, "SET memory_limit = '64GB'")
 dbExecute(model_panel_con, "SET threads = 12")
 ```
 
-Since `dbWriteTable()` needs a real data frame and the whole panel does not fit most personal computers RAM memory, we write it day by day, as we did when building `mitma_daily`.
+Since `dbWriteTable()` needs a real data frame, and on a personal computer the whole panel would not fit in RAM memory, we write it day by day, as we did when building `mitma_daily`.
 
 ```{r}
 # Run the for loop for every day in our study period:
