@@ -184,13 +184,7 @@ dem_to_join <- dem_adrh |>
   select(municipality, district, section, year, population)
 
 # From the income tibble we keep the join keys, the income variable MITMS
-# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
-# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
-# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
-# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
-# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
-# actually (see INDICAR A COMO SE TERMINE LLAMANDO EL DOCUMENTO DE ISSUE FOUND)
-# uses (net income per person):
+# actually uses (net income per person, see 10_annex_income_mismatch.qmd):
 income_to_join <- income_adrh |>
   select(municipality, district, section, year,mean_net_income_person)
 
@@ -202,13 +196,8 @@ adrh <- dem_to_join |>
     keep = FALSE
   )
 
-# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
-# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
-# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
-# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
-# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
-# Filter too keep 2020 (it i is the year MITMS actually uses, SEE REFERENCIAR BIEN
-# 2022 and 2023 (the years in our study period):
+# Filter to keep 2020 (it is the year MITMS actually uses, see
+# 10_annex_income_mismatch.qmd), 2022 and 2023 (the years in our study period):
 adrh <- adrh |>
   filter(year %in% c(2020, 2022, 2023))
 
@@ -254,7 +243,7 @@ adrh_mitma |>
   )
 ```
 
-There are 739 sections (three times that amount of rows because we have data for three years), that are not assigned to a zone. We discuss what they are in (((MENCIONAR EL DOCUMENTO CORRECTO, ¿ANEXO B? lo que termine siendo el issue_found))) none of them can be asigned to a zone, using INE section code, so we drop them:
+There are 739 sections (three times that amount of rows because we have data for three years) that are not assigned to a zone. None of them can be assigned to a zone using the INE section code, so we drop them:
 
 ```{r}
 adrh_mitma <- adrh_mitma |>
