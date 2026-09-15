@@ -5,30 +5,27 @@ format: html
 editor: visual
 ---
 
+In order to have a shared style across all the plots in the masters thesis and to avoid repeating the code for this shared style, we created a custom theme that we can add to any ggplot. This documents explains the decisions that determine what`theme_tfm.R` does, and the decisions regarding the color palette.
+
 ```{r}
 library(ggplot2)
 library(RColorBrewer)
 library(colorBlindness)
 ```
 
-In order to have a shared style across all the plots in the masters thesis and to avoid repeating the code for this shared style, we created a custom theme that we can add to any ggplot. This documents explains the decisions taken in the code that can be checked at the accompanying file `theme_tfm.R`. We also explain the decisioins regarding the color palette.
-
 ## Font
 
-Since we are using the APA Latex template UC3M offers, we decided to follow [APA font suggestions for figures](https://apastyle.apa.org/style-grammar-guidelines/paper-format/font): "a sans serif font with a type size between 8 and 14 points". We settled on Atkinson Hyperlegyble Next. This font, created by the Braille Institute, meets the san serif criteria and, additionaly, improves accesibility since it was ["designed to improve legibility and readability for individuals with low vision"](https://www.brailleinstitute.org/freefont/).
+Since we are using the APA Latex template UC3M offers, we decided to follow [APA font suggestions for figures](https://apastyle.apa.org/style-grammar-guidelines/paper-format/font): "a sans serif font with a type size between 8 and 14 points". We settled on Atkinson Hyperlegyble Next. This font, created by the Braille Institute, meets the sans serif criteria and, additionally, improves accessibility since it was ["designed to improve legibility and readability for individuals with low vision"](https://www.brailleinstitute.org/freefont/).
 
 ## Base theme
 
-We didn't create the settings for our custom theme from scratch, we use `theme_minimal` from `ggplot2` as a base. This theme provides a clean and accesible style as a foundation, to which we added some tweaks:
-
-- Cuando termine los añado, están en el script, igual es redundante esto y lo quito por completo.
-
+We didn't create the settings for our custom theme from scratch, we use `theme_minimal` from `ggplot2` as a base. This theme provides a clean and accessible style as a foundation, to which we added some tweaks.
 
 ## Color palette
 
 We followed Wickham, Navarro, and Lin's [*ggplot2: Elegant Graphics for Data Analysis (3e)*](https://ggplot2-book.org/scales-colour.html) suggestions when deciding what color palette to use. Keeping in mind color blind users, we decided to use the following palettes:
 
-- For *discrete variables*, we will use a `Set2`, and `Dark2`. `Dark2` is "particularly good for points" and `Set2` is among the palettes that "work well for areas" ([Wickham, Navarro, & Pedersen, 2026, Chapter 11](https://ggplot2-book.org/scales-colour.html#brewer-scales)).
+- For *discrete variables*, we will use a `Set2`, and `Dark2`. `Dark2` is "particularly good for points" and `Set2` is among the palettes that "work well for areas" ([Wickham, Navarro, and Lin, 2026, Chapter 11](https://ggplot2-book.org/scales-colour.html#brewer-scales)).
 
 ```{r}
 display.brewer.all(select = c("Set2", "Dark2"))
@@ -52,19 +49,40 @@ brewer.pal.info["YlGnBu", ]
 # idea of how the colors would look for different kinds of colorblindness:
 colorBlindness::displayAllColors(brewer.pal(n = 9, "YlGnBu"))
 ```
-- When used in maps, to visibly differenciate NA values, since the default gray can be hard to see within the blue range, we use the default red at alpha = 50.
 
-- When we want to represent discrete ordered variables not in maps (points, lines, etc.), the lighter (yellow) side of the scale is too light to work against a white background. In those cases, we will ask for more colour steps than needed and remove the lighter ones. For example, if we need three colour steps, we ask for four and remove the two darker ones:
+- When used in maps, to visibly differentiate NA values, since the default gray can be hard to see within the blue range, we use the default red at alpha = 50. No maps made it into the final report, but this decision is applied in the maps you may find if you run the scripts.
+
+- When we want to represent discrete ordered variables not in maps (points, lines, etc.), the lighter (yellow) side of the scale is too light to work against a white background. In those cases, we ask `display.brewer.pal()` for more colour steps than needed and ignore the lighter ones. For example, if we need three colour steps, we ask for four and ignore the lighter one:
 
 ```{r}
 # We would not use the first one if we need 3 steps:
 display.brewer.pal(4, "YlGnBu")
 ```
-For plots where we we only need *one color*, we will just use black black and gray. For plots where we need to *highlight one element against the rest*, we will use the orange (second step in `Dark2`) against gray. If we need a combination of just two colors... ya lo veremos, me gusta orange y blue o yellow y blue, pero depende.
+
+
+We also used *two extra color scales for ordered variables*: when we need to represent UTCI bins we use `YlOrRd`, since it represents a color scheme traditionally associated with heat. When we need to represent age groups we use `Purples`, associating the lighter colors with the younger groups and the darker tones with the older ones. This way we make sure the reader easily realizes that color refers to a different variable. We also discard the lighter steps when necessary.
+
+These palettes are also colorblind-friendly:
 
 ```{r}
-# The orange of Dark2:
+brewer.pal.info["YlOrRd", ]
+colorBlindness::displayAllColors(brewer.pal(n = 9, "YlOrRd"))
+```
+
+```{r}
+brewer.pal.info["Purples", ]
+colorBlindness::displayAllColors(brewer.pal(n = 9, "Purples"))
+```
+
+For plots where we we only need *one color*, we will just use black and gray when we don't need to fill large areas (for example, dots or lollipops), and blue (the third step in `Set2`) and gray when we need to fill large areas. For plots where we need to *highlight one element against the rest*, we will use the orange (second step in `Dark2`) against gray.
+
+```{r}
+# The blue from Set2:
+brewer.pal(8, "Set2")[3]
+
+# The orange from Dark2:
 brewer.pal(8, "Dark2")[2]
 ```
+
 
 
