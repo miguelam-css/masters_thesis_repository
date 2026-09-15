@@ -99,10 +99,9 @@ To make sure we have some margin of error, we will request the data with at leas
   - East: -13º
 - For the peninsula and Balearic Islands:
   - North: 44.25º
+
   - South: 35º
+
   - West: -9.75º
+
   - East: 4.75º
-
-## NOTA:
-
-Podría investigar cómo utilizar el código que aparece en la pantalla final en ECMWEF e igual crear un archivo para reproducirlo por completo, pero de momento dejo la descarga manual porque no es codigo de R y ya la he iniciado (aquí: https://cds.climate.copernicus.eu/datasets/derived-utci-historical?tab=download)
